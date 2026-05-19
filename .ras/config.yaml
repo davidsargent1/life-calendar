@@ -1,0 +1,133 @@
+# Project-local ras configuration.
+# Relative data_dir paths resolve from the repository root.
+# Project config overrides global config.
+data_dir: ".ras/data"
+
+# Configured review agents. ras runs every configured agent unless --agents is
+# passed. The default set is codex + claude + gemini.
+agents:
+  codex:
+    type: subprocess
+    command: ["codex", "exec", "--sandbox", "danger-full-access", "--dangerously-bypass-approvals-and-sandbox", "-"]
+    # Optional default model for this named agent profile.
+    # model: gpt-5.4
+    # timeout_seconds overrides review.timeout_seconds for this agent.
+    # timeout_seconds: 900
+    # env adds process environment variables for this agent.
+    # env:
+    #   EXAMPLE: value
+  claude:
+    type: subprocess
+    command: ["claude", "-p", "--permission-mode", "bypassPermissions"]
+    # timeout_seconds: 900
+  gemini:
+    type: subprocess
+    command: ["gemini", "--approval-mode", "yolo", "-p", ""]
+    # timeout_seconds: 900
+
+# Optional named model profiles. A selected profile supplies the default
+# multi-agent panel and per-agent models for review-like workflows.
+# model_profiles:
+#   deep-review:
+#     agents:
+#       - name: codex
+#         model: gpt-5.5
+#       - name: claude
+#         model: opus
+#     synthesis:
+#       agent: claude
+#       model: opus
+#     verify:
+#       agent: claude
+#       model: opus
+#     builder:
+#       model: gpt-5.3-codex
+
+# Agent used to synthesize the final review after reviewer/adjudication rounds.
+synthesis:
+  agent: claude
+
+# Agent used to score experiment cells. If unset, ras uses synthesis.agent.
+evaluation:
+  agent: claude
+
+# Review pipeline controls.
+review:
+  # model_profile: deep-review
+  # Optional guidance appended to the built-in ras protocol prompts.
+  # prompt: |
+  #   Review from architecture, code quality, idiomatic code, security,
+  #   and release-readiness perspectives.
+
+  # Per-agent timeout in seconds unless an agent-specific timeout is set.
+  timeout_seconds: 900
+
+  # Run R2/R3 adjudication over reviewer findings before synthesis.
+  adjudication: true
+
+  # Maximum R3 conflict-resolution rounds after normal R2 adjudication.
+  max_conflict_rounds: 1
+
+  # Worktree retention policy: never, on_failure, or always.
+  keep_worktrees: on_failure
+
+  # Minimum successful R1 reviewers required before adjudication/synthesis.
+  min_successful_reviewers: 2
+
+  # Context shapes: full, tiered, lean, chunked.
+  context_shape: full
+
+  # Delivery modes: inline, auto, session.
+  # Bundled subprocess agents support inline. auto records requested delivery as
+  # auto and actual delivery as the adapter-selected mode, currently inline.
+  # session requires an adapter that reports session support.
+  delivery_mode: inline
+
+# consider and verify can select model profiles independently from review.
+# consider:
+#   model_profile: deep-review
+# verify:
+#   model_profile: deep-review
+
+# Local read-only web UI.
+serve:
+  addr: 127.0.0.1:1948
+  # Optional aggregate mode inputs.
+  # workspaces:
+  #   - ..
+  # projects:
+  #   - ../other-project
+
+# Builder used by ras implement. The default builder is codex.
+builder:
+  command: ["codex", "exec", "--sandbox", "danger-full-access", "--dangerously-bypass-approvals-and-sandbox", "-"]
+  # Optional fallback builder model when no builder model profile is selected.
+  # model: gpt-5.3-codex
+  timeout: 30m
+  # Optional instructions included in every builder prompt.
+  # instructions: |
+  #   Run project checks before declaring done.
+
+# Implement-loop controls for ras implement.
+implement:
+  default_mode: local
+  # PR-backed mode options used when default_mode is pr or --open-pr is passed.
+  pr_remote: origin
+  # pr_base: main
+  # New project configs get a larger loop budget for future PR-backed mode.
+  # Projects without an implement section use the runtime fallback of 10.
+  max_iterations: 20
+  max_review_loops: 3
+  max_fix_loops: 3
+  # Optional role-specific profiles for PR-backed implementation loops.
+  # builder_model_profile: deep-review
+  # review_model_profile: deep-review
+  # verify_model_profile: deep-review
+  # gate_model_profile: deep-review
+  # PR-backed builders use a scrubbed environment by default.
+  # pr_builder_inherit_env: false
+  stuck_threshold: 3
+  pr_gate:
+    blocking_severities: [critical, high]
+    medium_blocking_categories: [security, correctness, data_loss, migration, prd_requirement]
+  default_squash: false
