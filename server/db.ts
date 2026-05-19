@@ -1,6 +1,7 @@
 import Database from "better-sqlite3";
 import { mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { toDateKey } from "../shared/dates";
 import type { CreateLifeItemInput, LifeItem, UpdateLifeItemInput } from "../shared/types";
 
 const dbPath = join(process.cwd(), "data", "life-calendar.sqlite");
@@ -8,6 +9,7 @@ mkdirSync(dirname(dbPath), { recursive: true });
 
 export const db = new Database(dbPath);
 db.pragma("journal_mode = WAL");
+db.pragma("foreign_keys = ON");
 
 export function migrate(): void {
   db.exec(`
@@ -43,7 +45,7 @@ export function seedIfEmpty(): void {
     return;
   }
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = toDateKey(new Date());
   const now = new Date().toISOString();
   const insert = db.prepare(`
     INSERT INTO items (

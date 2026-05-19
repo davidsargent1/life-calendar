@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { isDateKey, toDateKey } from "../shared/dates";
 import { buildToday, calculateDueDate, toNudge } from "../shared/rules";
 import type { LifeItem } from "../shared/types";
 
@@ -48,6 +49,34 @@ describe("life reminder rules", () => {
 
     expect(calculateDueDate(item, "2026-05-19")).toBe("2026-05-19");
     expect(toNudge(item, "2026-05-19").urgency).toBe("today");
+  });
+
+  it("does not resurface a birthday reminder after it is completed for the current cycle", () => {
+    const item: LifeItem = {
+      ...baseItem,
+      type: "birthday",
+      title: "Buy Maya's birthday present",
+      cadenceDays: null,
+      birthdayMonth: 5,
+      birthdayDay: 26,
+      reminderLeadDays: 7,
+      lastCompletedAt: "2026-05-19"
+    };
+
+    const nudge = toNudge(item, "2026-05-20");
+
+    expect(nudge.urgency).not.toBe("overdue");
+    expect(nudge.dueDate).toBe("2027-05-19");
+  });
+
+  it("uses local date parts for kiosk date keys", () => {
+    expect(toDateKey(new Date(2026, 4, 19, 20))).toBe("2026-05-19");
+  });
+
+  it("validates date keys before storing completions", () => {
+    expect(isDateKey("2026-05-19")).toBe(true);
+    expect(isDateKey("bogus")).toBe(false);
+    expect(isDateKey("2026-02-31")).toBe(false);
   });
 
   it("groups the dashboard by urgency", () => {

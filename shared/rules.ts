@@ -6,7 +6,18 @@ const SOON_WINDOW_DAYS = 7;
 export function calculateDueDate(item: LifeItem, todayKey: string): string | null {
   if (item.type === "birthday" && item.birthdayMonth && item.birthdayDay) {
     const birthday = nextBirthdayDate(todayKey, item.birthdayMonth, item.birthdayDay);
-    return addDays(birthday, -(item.reminderLeadDays ?? 7));
+    const reminderDate = addDays(birthday, -(item.reminderLeadDays ?? 7));
+
+    if (
+      item.lastCompletedAt &&
+      daysBetween(reminderDate, item.lastCompletedAt) >= 0 &&
+      daysBetween(item.lastCompletedAt, birthday) >= 0
+    ) {
+      const nextBirthday = nextBirthdayDate(addDays(birthday, 1), item.birthdayMonth, item.birthdayDay);
+      return addDays(nextBirthday, -(item.reminderLeadDays ?? 7));
+    }
+
+    return reminderDate;
   }
 
   if (item.cadenceDays && item.lastCompletedAt) {

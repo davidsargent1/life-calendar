@@ -10,7 +10,7 @@ import {
   seedIfEmpty,
   updateItem
 } from "./db";
-import { toDateKey } from "../shared/dates";
+import { isDateKey, toDateKey } from "../shared/dates";
 import { buildToday } from "../shared/rules";
 import type { CreateLifeItemInput, UpdateLifeItemInput } from "../shared/types";
 
@@ -59,7 +59,17 @@ app.patch("/api/items/:id", (request, response) => {
 });
 
 app.post("/api/items/:id/complete", (request, response) => {
-  const completedAt = String(request.body?.completedAt ?? toDateKey(new Date()));
+  const rawCompletedAt = request.body?.completedAt;
+  const completedAt =
+    typeof rawCompletedAt === "string" && rawCompletedAt.length > 0
+      ? rawCompletedAt
+      : toDateKey(new Date());
+
+  if (!isDateKey(completedAt)) {
+    response.status(400).json({ error: "completedAt must use YYYY-MM-DD format" });
+    return;
+  }
+
   const item = completeItem(request.params.id, completedAt);
 
   if (!item) {

@@ -68,14 +68,22 @@ export default function App() {
   }, []);
 
   async function handleComplete(nudge: TodayNudge) {
-    await completeItem(nudge.item.id, toDateKey(new Date()));
-    await load();
+    try {
+      await completeItem(nudge.item.id, toDateKey(new Date()));
+      await load();
+    } catch (completeError: unknown) {
+      setError(completeError instanceof Error ? completeError.message : "Failed to mark item done");
+    }
   }
 
   async function handleCreate(input: CreateLifeItemInput) {
-    await createItem(input);
-    await load();
-    setView("today");
+    try {
+      await createItem(input);
+      await load();
+      setView("today");
+    } catch (createError: unknown) {
+      setError(createError instanceof Error ? createError.message : "Failed to save reminder");
+    }
   }
 
   return (
