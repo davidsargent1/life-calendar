@@ -76,6 +76,7 @@ The v1 will be standalone, Pi-only, touch-first, and backed by SQLite so it work
 - Keep `main` as the stable branch.
 - Do all implementation work in feature branches.
 - Open a pull request for each feature branch before merging into `main`.
+- Run `ras` on code pull requests before merging into `main`.
 - Include a short PR summary, test results, and screenshots for visible UI changes.
 
 ## Assumptions
