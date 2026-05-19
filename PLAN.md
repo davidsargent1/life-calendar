@@ -71,6 +71,13 @@ The v1 will be standalone, Pi-only, touch-first, and backed by SQLite so it work
 - Frontend smoke test that the Today dashboard renders seeded reminders.
 - Run the app locally and verify the dashboard at a 7-inch landscape-like viewport.
 
+## Development Workflow
+
+- Keep `main` as the stable branch.
+- Do all implementation work in feature branches.
+- Open a pull request for each feature branch before merging into `main`.
+- Include a short PR summary, test results, and screenshots for visible UI changes.
+
 ## Assumptions
 
 - The target device is a Raspberry Pi touchscreen in landscape orientation.
