@@ -31,9 +31,16 @@ export async function completeItem(id: string, completedAt: string): Promise<Lif
 }
 
 async function readJson<T>(response: Response): Promise<T> {
+  const contentType = response.headers.get("content-type") ?? "";
+  const isJson = contentType.includes("application/json");
+
   if (!response.ok) {
-    const body = await response.text();
+    const body = isJson ? JSON.stringify(await response.json()) : await response.text();
     throw new Error(body || response.statusText);
+  }
+
+  if (!isJson) {
+    throw new Error(`API returned ${response.status} with non-JSON content — is the server running?`);
   }
 
   return response.json() as Promise<T>;
