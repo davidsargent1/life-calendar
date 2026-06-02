@@ -1,3 +1,5 @@
+import "dotenv/config";
+import Anthropic from "@anthropic-ai/sdk";
 import cors from "cors";
 import express from "express";
 import {
@@ -16,12 +18,68 @@ import type { CreateLifeItemInput, UpdateLifeItemInput } from "../shared/types";
 
 const app = express();
 const port = Number(process.env.PORT ?? 8787);
+const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 migrate();
 seedIfEmpty();
 
 app.use(cors());
 app.use(express.json());
+
+app.post("/api/parse-reminder", async (request, response) => {
+  const { text } = request.body as { text?: string };
+
+  if (!text?.trim()) {
+    response.status(400).json({ error: "text is required" });
+    return;
+  }
+
+  const systemPrompt = `You convert natural-language reminder descriptions into structured JSON for a life calendar app.
+Return ONLY valid JSON matching this TypeScript type (omit null/undefined fields):
+{
+  type: "contact" | "chore" | "birthday" | "shopping" | "routine",
+  title: string,
+  category?: string,
+  cadenceDays?: number,
+  dueDate?: string,       // YYYY-MM-DD
+  birthdayMonth?: number, // 1-12
+  birthdayDay?: number,   // 1-31
+  reminderLeadDays?: number,
+  contactName?: string
+}
+Rules:
+- "contact" type = calling/texting/visiting a person; set contactName
+- "birthday" type = birthday reminders; set birthdayMonth/birthdayDay/reminderLeadDays
+- "chore" type = household tasks
+- "shopping" type = buying things
+- "routine" type = personal habits
+- cadenceDays = how often to repeat in days (e.g. "every 2 weeks" = 14)
+- category should be a short label like "People", "Home", "Health", "Shopping", "Events"
+- Do not include null values, only include fields that have meaningful values`;
+
+  try {
+    const msg = await anthropic.messages.create({
+      model: "claude-haiku-4-5-20251001",
+      max_tokens: 512,
+      system: systemPrompt,
+      messages: [{ role: "user", content: text }]
+    });
+
+    const raw = msg.content[0].type === "text" ? msg.content[0].text.trim() : "";
+    const jsonMatch = raw.match(/\{[\s\S]*\}/);
+
+    if (!jsonMatch) {
+      response.status(422).json({ error: "Could not parse AI response" });
+      return;
+    }
+
+    const parsed = JSON.parse(jsonMatch[0]) as CreateLifeItemInput;
+    response.json(parsed);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "AI parsing failed";
+    response.status(500).json({ error: message });
+  }
+});
 
 app.get("/api/health", (_request, response) => {
   response.json({ ok: true });

@@ -20,6 +20,16 @@ export async function createItem(input: CreateLifeItemInput): Promise<LifeItem> 
   return readJson(response);
 }
 
+export async function parseReminder(text: string): Promise<CreateLifeItemInput> {
+  const response = await fetch("/api/parse-reminder", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ text })
+  });
+
+  return readJson(response);
+}
+
 export async function completeItem(id: string, completedAt: string): Promise<LifeItem> {
   const response = await fetch(`/api/items/${id}/complete`, {
     method: "POST",
