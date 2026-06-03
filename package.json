@@ -12,12 +12,12 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.100.1",
     "better-sqlite3": "^12.4.1",
     "cors": "^2.8.5",
     "dotenv": "^17.4.2",
     "express": "^5.1.0",
     "express-rate-limit": "^8.5.2",
+    "openai": "^6.41.0",
     "react": "^19.1.1",
     "react-dom": "^19.1.1"
   },
