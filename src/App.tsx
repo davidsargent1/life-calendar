@@ -21,9 +21,11 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  async function load(includeArchived = false) {
+  async function load(_includeArchived = false) {
     setError(null);
-    const [todayResponse, itemResponse] = await Promise.all([fetchToday(), fetchItems(includeArchived)]);
+    // Always fetch all items (including archived) so the Items view can
+    // show the "Show archived" toggle when archived items exist.
+    const [todayResponse, itemResponse] = await Promise.all([fetchToday(), fetchItems(true)]);
     setToday(todayResponse);
     setItems(itemResponse);
     setLoading(false);
@@ -382,7 +384,7 @@ function ItemsView({
   onError
 }: {
   items: LifeItem[];
-  onReload: (includeArchived?: boolean) => void;
+  onReload: () => void;
   onError: (msg: string) => void;
 }) {
   const [showArchived, setShowArchived] = useState(false);
@@ -395,7 +397,7 @@ function ItemsView({
       } else {
         await archiveItem(item.id);
       }
-      onReload(showArchived);
+      onReload();
     } catch (err) {
       onError(err instanceof Error ? err.message : "Failed to update reminder");
     }
@@ -406,16 +408,14 @@ function ItemsView({
     try {
       await updateItem(editingItem.id, input);
       setEditingItem(null);
-      onReload(showArchived);
+      onReload();
     } catch (err) {
       onError(err instanceof Error ? err.message : "Failed to save changes");
     }
   }
 
   function toggleArchived() {
-    const next = !showArchived;
-    setShowArchived(next);
-    onReload(next);
+    setShowArchived(next => !next);
   }
 
   const active = items.filter(i => !i.archived);

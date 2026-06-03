@@ -225,6 +225,10 @@ h3 {
   padding: 14px;
 }
 
+.nudge-card {
+  align-items: center;
+}
+
 .item-row {
   align-items: center;
   grid-template-columns: 1fr auto auto;

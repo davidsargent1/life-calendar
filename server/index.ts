@@ -174,6 +174,11 @@ app.post("/api/items", (request, response) => {
     return;
   }
 
+  if (input.dueDate !== undefined && input.dueDate !== null && !isDateKey(input.dueDate)) {
+    response.status(400).json({ error: "dueDate must be a valid YYYY-MM-DD date" });
+    return;
+  }
+
   response.status(201).json(createItem(input));
 });
 
