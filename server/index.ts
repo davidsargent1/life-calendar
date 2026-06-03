@@ -4,6 +4,7 @@ import cors from "cors";
 import express from "express";
 import { rateLimit } from "express-rate-limit";
 import {
+  archiveItem,
   completeItem,
   createItem,
   deleteItem,
@@ -11,6 +12,7 @@ import {
   listItems,
   migrate,
   seedIfEmpty,
+  unarchiveItem,
   updateItem
 } from "./db";
 import { isDateKey, toDateKey } from "../shared/dates";
@@ -50,9 +52,9 @@ function validateParsedReminder(raw: unknown): CreateLifeItemInput {
 
   if (typeof obj.category === "string") result.category = obj.category;
   if (typeof obj.cadenceDays === "number" && obj.cadenceDays > 0) result.cadenceDays = Math.round(obj.cadenceDays);
-  if (typeof obj.dueDate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(obj.dueDate)) result.dueDate = obj.dueDate;
-  if (typeof obj.birthdayMonth === "number") result.birthdayMonth = Math.round(obj.birthdayMonth);
-  if (typeof obj.birthdayDay === "number") result.birthdayDay = Math.round(obj.birthdayDay);
+  if (typeof obj.dueDate === "string" && isDateKey(obj.dueDate)) result.dueDate = obj.dueDate;
+  if (typeof obj.birthdayMonth === "number" && obj.birthdayMonth >= 1 && obj.birthdayMonth <= 12) result.birthdayMonth = Math.round(obj.birthdayMonth);
+  if (typeof obj.birthdayDay === "number" && obj.birthdayDay >= 1 && obj.birthdayDay <= 31) result.birthdayDay = Math.round(obj.birthdayDay);
   if (typeof obj.reminderLeadDays === "number") result.reminderLeadDays = Math.round(obj.reminderLeadDays);
   if (typeof obj.contactName === "string") result.contactName = obj.contactName;
 
@@ -136,8 +138,27 @@ app.get("/api/today", (request, response) => {
   response.json(buildToday(listItems(), today));
 });
 
-app.get("/api/items", (_request, response) => {
-  response.json(listItems());
+app.get("/api/items", (request, response) => {
+  const includeArchived = request.query.archived === "true";
+  response.json(listItems(includeArchived));
+});
+
+app.post("/api/items/:id/archive", (request, response) => {
+  const item = archiveItem(request.params.id);
+  if (!item) {
+    response.status(404).json({ error: "item not found" });
+    return;
+  }
+  response.json(item);
+});
+
+app.post("/api/items/:id/unarchive", (request, response) => {
+  const item = unarchiveItem(request.params.id);
+  if (!item) {
+    response.status(404).json({ error: "item not found" });
+    return;
+  }
+  response.json(item);
 });
 
 app.post("/api/items", (request, response) => {
@@ -148,11 +169,33 @@ app.post("/api/items", (request, response) => {
     return;
   }
 
+  if (input.cadenceDays !== undefined && input.cadenceDays !== null && input.cadenceDays <= 0) {
+    response.status(400).json({ error: "cadenceDays must be a positive number" });
+    return;
+  }
+
+  if (input.dueDate !== undefined && input.dueDate !== null && !isDateKey(input.dueDate)) {
+    response.status(400).json({ error: "dueDate must be a valid YYYY-MM-DD date" });
+    return;
+  }
+
   response.status(201).json(createItem(input));
 });
 
 app.patch("/api/items/:id", (request, response) => {
-  const item = updateItem(request.params.id, request.body as UpdateLifeItemInput);
+  const input = request.body as UpdateLifeItemInput;
+
+  if (input.cadenceDays !== undefined && input.cadenceDays !== null && input.cadenceDays <= 0) {
+    response.status(400).json({ error: "cadenceDays must be a positive number" });
+    return;
+  }
+
+  if (input.dueDate !== undefined && input.dueDate !== null && !isDateKey(input.dueDate)) {
+    response.status(400).json({ error: "dueDate must be a valid YYYY-MM-DD date" });
+    return;
+  }
+
+  const item = updateItem(request.params.id, input);
 
   if (!item) {
     response.status(404).json({ error: "item not found" });

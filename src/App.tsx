@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { completeItem, createItem, fetchItems, fetchToday, parseReminder } from "./api";
+import { archiveItem, completeItem, createItem, fetchItems, fetchToday, parseReminder, unarchiveItem, updateItem } from "./api";
 import { formatShortDate, toDateKey } from "../shared/dates";
 import type { CreateLifeItemInput, LifeItem, LifeItemType, TodayNudge, TodayResponse } from "../shared/types";
 
@@ -21,9 +21,11 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  async function load() {
+  async function load(_includeArchived = false) {
     setError(null);
-    const [todayResponse, itemResponse] = await Promise.all([fetchToday(), fetchItems()]);
+    // Always fetch all items (including archived) so the Items view can
+    // show the "Show archived" toggle when archived items exist.
+    const [todayResponse, itemResponse] = await Promise.all([fetchToday(), fetchItems(true)]);
     setToday(todayResponse);
     setItems(itemResponse);
     setLoading(false);
@@ -73,7 +75,13 @@ export default function App() {
 
       {!loading && view === "add" && <AddView onCreate={handleCreate} />}
 
-      {!loading && view === "items" && <ItemsView items={items} />}
+      {!loading && view === "items" && (
+        <ItemsView
+          items={items}
+          onReload={load}
+          onError={setError}
+        />
+      )}
     </main>
   );
 }
@@ -257,11 +265,13 @@ function AddView({ onCreate }: { onCreate: (input: CreateLifeItemInput) => void 
 function EditDraftView({
   draft: initialDraft,
   onBack,
-  onCreate
+  onCreate,
+  saveLabel = "Save reminder"
 }: {
   draft: CreateLifeItemInput;
   onBack: () => void;
   onCreate: (input: CreateLifeItemInput) => void;
+  saveLabel?: string;
 }) {
   const [draft, setDraft] = useState<CreateLifeItemInput>(initialDraft);
 
@@ -361,27 +371,109 @@ function EditDraftView({
         </div>
 
         <button className="primary-action" type="submit">
-          Save reminder
+          {saveLabel}
         </button>
       </form>
     </div>
   );
 }
 
-function ItemsView({ items }: { items: LifeItem[] }) {
+function ItemsView({
+  items,
+  onReload,
+  onError
+}: {
+  items: LifeItem[];
+  onReload: () => void;
+  onError: (msg: string) => void;
+}) {
+  const [showArchived, setShowArchived] = useState(false);
+  const [editingItem, setEditingItem] = useState<LifeItem | null>(null);
+
+  async function handleArchive(item: LifeItem) {
+    try {
+      if (item.archived) {
+        await unarchiveItem(item.id);
+      } else {
+        await archiveItem(item.id);
+      }
+      onReload();
+    } catch (err) {
+      onError(err instanceof Error ? err.message : "Failed to update reminder");
+    }
+  }
+
+  async function handleSaveEdit(input: CreateLifeItemInput) {
+    if (!editingItem) return;
+    try {
+      await updateItem(editingItem.id, input);
+      setEditingItem(null);
+      onReload();
+    } catch (err) {
+      onError(err instanceof Error ? err.message : "Failed to save changes");
+    }
+  }
+
+  function toggleArchived() {
+    setShowArchived(next => !next);
+  }
+
+  const active = items.filter(i => !i.archived);
+  const archived = items.filter(i => i.archived);
+  const visible = showArchived ? items : active;
+
+  if (editingItem) {
+    const draft: CreateLifeItemInput = {
+      type: editingItem.type,
+      title: editingItem.title,
+      category: editingItem.category,
+      cadenceDays: editingItem.cadenceDays,
+      dueDate: editingItem.dueDate,
+      birthdayMonth: editingItem.birthdayMonth,
+      birthdayDay: editingItem.birthdayDay,
+      reminderLeadDays: editingItem.reminderLeadDays,
+      contactName: editingItem.contactName
+    };
+    return (
+      <EditDraftView
+        draft={draft}
+        onBack={() => setEditingItem(null)}
+        onCreate={handleSaveEdit}
+        saveLabel="Save changes"
+      />
+    );
+  }
+
   return (
     <section className="items-table">
       <div className="section-heading">
         <h2>All reminders</h2>
-        <span>{items.length}</span>
+        <div className="items-heading-right">
+          <span>{active.length}{archived.length > 0 ? ` + ${archived.length} archived` : ""}</span>
+          {archived.length > 0 && (
+            <button className="toggle-archived" onClick={toggleArchived}>
+              {showArchived ? "Hide archived" : "Show archived"}
+            </button>
+          )}
+        </div>
       </div>
-      {items.map((item) => (
-        <article className="item-row" key={item.id}>
+      {visible.map((item) => (
+        <article className={`item-row${item.archived ? " archived" : ""}`} key={item.id}>
           <div>
             <p>{item.title}</p>
             <span>{typeLabels[item.type]} • {item.category}</span>
           </div>
-          <span>{item.cadenceDays ? `Every ${item.cadenceDays} days` : item.dueDate ? formatShortDate(item.dueDate) : "Manual"}</span>
+          <span className="item-cadence">
+            {item.cadenceDays ? `Every ${item.cadenceDays} days` : item.dueDate ? formatShortDate(item.dueDate) : "Manual"}
+          </span>
+          <div className="item-actions">
+            {!item.archived && (
+              <button onClick={() => setEditingItem(item)}>Edit</button>
+            )}
+            <button onClick={() => handleArchive(item)}>
+              {item.archived ? "Unarchive" : "Archive"}
+            </button>
+          </div>
         </article>
       ))}
     </section>
