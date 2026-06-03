@@ -178,7 +178,19 @@ app.post("/api/items", (request, response) => {
 });
 
 app.patch("/api/items/:id", (request, response) => {
-  const item = updateItem(request.params.id, request.body as UpdateLifeItemInput);
+  const input = request.body as UpdateLifeItemInput;
+
+  if (input.cadenceDays !== undefined && input.cadenceDays !== null && input.cadenceDays <= 0) {
+    response.status(400).json({ error: "cadenceDays must be a positive number" });
+    return;
+  }
+
+  if (input.dueDate !== undefined && input.dueDate !== null && !isDateKey(input.dueDate)) {
+    response.status(400).json({ error: "dueDate must be a valid YYYY-MM-DD date" });
+    return;
+  }
+
+  const item = updateItem(request.params.id, input);
 
   if (!item) {
     response.status(404).json({ error: "item not found" });

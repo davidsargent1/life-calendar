@@ -217,14 +217,17 @@ h3 {
 
 .nudge-card,
 .item-row {
-  align-items: center;
   background: #faf7ef;
   border: 1px solid #e8dfcf;
   border-radius: 8px;
   display: grid;
   gap: 10px;
-  grid-template-columns: 1fr auto auto;
   padding: 14px;
+}
+
+.item-row {
+  align-items: center;
+  grid-template-columns: 1fr auto auto;
 }
 
 .item-row.archived {

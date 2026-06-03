@@ -234,7 +234,7 @@ export function updateItem(id: string, input: UpdateLifeItemInput): LifeItem | n
     WHERE id = @id
   `).run(toDbParams(updated));
 
-  return updated;
+  return getItem(id);
 }
 
 export function completeItem(id: string, completedAt: string): LifeItem | null {
