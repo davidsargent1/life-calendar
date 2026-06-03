@@ -5,8 +5,27 @@ export async function fetchToday(): Promise<TodayResponse> {
   return readJson(response);
 }
 
-export async function fetchItems(): Promise<LifeItem[]> {
-  const response = await fetch("/api/items");
+export async function fetchItems(includeArchived = false): Promise<LifeItem[]> {
+  const response = await fetch(`/api/items${includeArchived ? "?archived=true" : ""}`);
+  return readJson(response);
+}
+
+export async function updateItem(id: string, input: Partial<CreateLifeItemInput>): Promise<LifeItem> {
+  const response = await fetch(`/api/items/${id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input)
+  });
+  return readJson(response);
+}
+
+export async function archiveItem(id: string): Promise<LifeItem> {
+  const response = await fetch(`/api/items/${id}/archive`, { method: "POST" });
+  return readJson(response);
+}
+
+export async function unarchiveItem(id: string): Promise<LifeItem> {
+  const response = await fetch(`/api/items/${id}/unarchive`, { method: "POST" });
   return readJson(response);
 }
 

@@ -36,6 +36,12 @@ export function migrate(): void {
       FOREIGN KEY (item_id) REFERENCES items(id) ON DELETE CASCADE
     );
   `);
+
+  // Incremental migrations
+  const cols = (db.prepare("PRAGMA table_info(items)").all() as Array<{ name: string }>).map(c => c.name);
+  if (!cols.includes("archived")) {
+    db.exec("ALTER TABLE items ADD COLUMN archived INTEGER NOT NULL DEFAULT 0");
+  }
 }
 
 export function seedIfEmpty(): void {
@@ -51,11 +57,11 @@ export function seedIfEmpty(): void {
     INSERT INTO items (
       id, type, title, category, cadence_days, due_date, birthday_month,
       birthday_day, reminder_lead_days, last_completed_at, contact_name,
-      created_at, updated_at
+      archived, created_at, updated_at
     ) VALUES (
       @id, @type, @title, @category, @cadenceDays, @dueDate, @birthdayMonth,
       @birthdayDay, @reminderLeadDays, @lastCompletedAt, @contactName,
-      @createdAt, @updatedAt
+      @archived, @createdAt, @updatedAt
     )
   `);
 
@@ -72,6 +78,7 @@ export function seedIfEmpty(): void {
       reminderLeadDays: null,
       lastCompletedAt: offsetDate(today, -34),
       contactName: "Grandma",
+      archived: false,
       createdAt: now,
       updatedAt: now
     },
@@ -87,6 +94,7 @@ export function seedIfEmpty(): void {
       reminderLeadDays: null,
       lastCompletedAt: offsetDate(today, -7),
       contactName: null,
+      archived: false,
       createdAt: now,
       updatedAt: now
     },
@@ -102,6 +110,7 @@ export function seedIfEmpty(): void {
       reminderLeadDays: null,
       lastCompletedAt: offsetDate(today, -10),
       contactName: null,
+      archived: false,
       createdAt: now,
       updatedAt: now
     },
@@ -117,6 +126,7 @@ export function seedIfEmpty(): void {
       reminderLeadDays: 7,
       lastCompletedAt: null,
       contactName: "Maya",
+      archived: false,
       createdAt: now,
       updatedAt: now
     }
@@ -131,8 +141,25 @@ export function seedIfEmpty(): void {
   transaction(seedItems);
 }
 
-export function listItems(): LifeItem[] {
-  return db.prepare("SELECT * FROM items ORDER BY category, title").all().map(fromRow);
+export function listItems(includeArchived = false): LifeItem[] {
+  const sql = includeArchived
+    ? "SELECT * FROM items ORDER BY archived ASC, category, title"
+    : "SELECT * FROM items WHERE archived = 0 ORDER BY category, title";
+  return db.prepare(sql).all().map(fromRow);
+}
+
+export function archiveItem(id: string): LifeItem | null {
+  const now = new Date().toISOString();
+  const result = db.prepare("UPDATE items SET archived = 1, updated_at = ? WHERE id = ?").run(now, id);
+  if (result.changes === 0) return null;
+  return getItem(id);
+}
+
+export function unarchiveItem(id: string): LifeItem | null {
+  const now = new Date().toISOString();
+  const result = db.prepare("UPDATE items SET archived = 0, updated_at = ? WHERE id = ?").run(now, id);
+  if (result.changes === 0) return null;
+  return getItem(id);
 }
 
 export function getItem(id: string): LifeItem | null {
@@ -154,6 +181,7 @@ export function createItem(input: CreateLifeItemInput): LifeItem {
     reminderLeadDays: input.reminderLeadDays ?? null,
     lastCompletedAt: null,
     contactName: input.contactName?.trim() || null,
+    archived: false,
     createdAt: now,
     updatedAt: now
   };
@@ -162,11 +190,11 @@ export function createItem(input: CreateLifeItemInput): LifeItem {
     INSERT INTO items (
       id, type, title, category, cadence_days, due_date, birthday_month,
       birthday_day, reminder_lead_days, last_completed_at, contact_name,
-      created_at, updated_at
+      archived, created_at, updated_at
     ) VALUES (
       @id, @type, @title, @category, @cadenceDays, @dueDate, @birthdayMonth,
       @birthdayDay, @reminderLeadDays, @lastCompletedAt, @contactName,
-      @createdAt, @updatedAt
+      @archived, @createdAt, @updatedAt
     )
   `).run(toDbParams(item));
 
@@ -206,7 +234,7 @@ export function updateItem(id: string, input: UpdateLifeItemInput): LifeItem | n
     WHERE id = @id
   `).run(toDbParams(updated));
 
-  return updated;
+  return getItem(id);
 }
 
 export function completeItem(id: string, completedAt: string): LifeItem | null {
@@ -255,6 +283,7 @@ function fromRow(row: unknown): LifeItem {
     reminderLeadDays: item.reminder_lead_days as number | null,
     lastCompletedAt: item.last_completed_at as string | null,
     contactName: item.contact_name as string | null,
+    archived: Boolean(item.archived),
     createdAt: String(item.created_at),
     updatedAt: String(item.updated_at)
   };
@@ -273,6 +302,7 @@ function toDbParams(item: LifeItem): Record<string, string | number | null> {
     reminderLeadDays: item.reminderLeadDays,
     lastCompletedAt: item.lastCompletedAt,
     contactName: item.contactName,
+    archived: item.archived ? 1 : 0,
     createdAt: item.createdAt,
     updatedAt: item.updatedAt
   };

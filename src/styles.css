@@ -220,7 +220,57 @@ h3 {
   background: #faf7ef;
   border: 1px solid #e8dfcf;
   border-radius: 8px;
+  display: grid;
+  gap: 10px;
   padding: 14px;
+}
+
+.nudge-card {
+  align-items: center;
+}
+
+.item-row {
+  align-items: center;
+  grid-template-columns: 1fr auto auto;
+}
+
+.item-row.archived {
+  opacity: 0.5;
+}
+
+.item-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.item-actions button {
+  background: transparent;
+  border: 1px solid #d8cfbf;
+  border-radius: 6px;
+  color: #3a5245;
+  font-size: 0.8rem;
+  min-height: unset;
+  padding: 4px 10px;
+}
+
+.item-actions button:hover {
+  background: #e8dfcf;
+}
+
+.items-heading-right {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+}
+
+.toggle-archived {
+  background: transparent;
+  border: 1px solid #d8cfbf;
+  border-radius: 6px;
+  color: #3a5245;
+  font-size: 0.8rem;
+  min-height: unset;
+  padding: 4px 10px;
 }
 
 .nudge-card {
@@ -339,11 +389,6 @@ h3 {
   padding: 18px;
 }
 
-.item-row {
-  align-items: center;
-  display: flex;
-  justify-content: space-between;
-}
 
 .item-row p {
   font-size: 1.05rem;
