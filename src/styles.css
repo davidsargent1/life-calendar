@@ -299,6 +299,13 @@ h3 {
   resize: vertical;
 }
 
+.char-count {
+  color: #8a8070;
+  font-size: 0.8rem;
+  margin: -8px 0 0;
+  text-align: right;
+}
+
 .add-actions {
   display: flex;
   gap: 10px;

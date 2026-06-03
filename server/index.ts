@@ -34,6 +34,11 @@ app.post("/api/parse-reminder", async (request, response) => {
     return;
   }
 
+  if (text.length > 500) {
+    response.status(400).json({ error: "Description is too long (max 500 characters)" });
+    return;
+  }
+
   const systemPrompt = `You convert natural-language reminder descriptions into structured JSON for a life calendar app.
 Return ONLY valid JSON matching this TypeScript type (omit null/undefined fields):
 {

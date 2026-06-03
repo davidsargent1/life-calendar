@@ -202,9 +202,12 @@ function AddView({ onCreate }: { onCreate: (input: CreateLifeItemInput) => void 
   const [parsing, setParsing] = useState(false);
   const [parseError, setParseError] = useState<string | null>(null);
 
+  const MAX_PROMPT = 500;
+  const tooLong = prompt.length > MAX_PROMPT;
+
   async function handleParse(event: React.FormEvent) {
     event.preventDefault();
-    if (!prompt.trim()) return;
+    if (!prompt.trim() || tooLong) return;
     setParsing(true);
     setParseError(null);
     try {
@@ -231,9 +234,12 @@ function AddView({ onCreate }: { onCreate: (input: CreateLifeItemInput) => void 
             value={prompt}
             onChange={(event) => setPrompt(event.target.value)}
           />
+          <p className="char-count" style={{ color: tooLong ? "#c0392b" : undefined }}>
+            {prompt.length} / {MAX_PROMPT}
+          </p>
           {parseError && <p className="notice">{parseError}</p>}
           <div className="add-actions">
-            <button className="primary-action" disabled={parsing || !prompt.trim()} type="submit">
+            <button className="primary-action" disabled={parsing || !prompt.trim() || tooLong} type="submit">
               {parsing ? "Thinking…" : "Create reminder"}
             </button>
             <button type="button" onClick={() => setDraft(emptyDraft)}>

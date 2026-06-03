@@ -43,8 +43,21 @@ export async function completeItem(id: string, completedAt: string): Promise<Lif
 async function readJson<T>(response: Response): Promise<T> {
   if (!response.ok) {
     const body = await response.text();
-    throw new Error(body || response.statusText);
+    const message = extractErrorMessage(body) ?? response.statusText;
+    throw new Error(message);
   }
 
   return response.json() as Promise<T>;
+}
+
+function extractErrorMessage(body: string): string | null {
+  try {
+    const parsed = JSON.parse(body) as unknown;
+    if (parsed && typeof parsed === "object" && "error" in parsed && typeof (parsed as Record<string, unknown>).error === "string") {
+      return (parsed as { error: string }).error;
+    }
+  } catch {
+    // not JSON — fall through
+  }
+  return body.trim() || null;
 }
