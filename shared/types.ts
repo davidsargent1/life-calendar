@@ -12,6 +12,7 @@ export type LifeItem = {
   reminderLeadDays: number | null;
   lastCompletedAt: string | null;
   contactName: string | null;
+  archived: boolean;
   createdAt: string;
   updatedAt: string;
 };

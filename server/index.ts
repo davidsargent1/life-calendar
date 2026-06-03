@@ -4,6 +4,7 @@ import cors from "cors";
 import express from "express";
 import { rateLimit } from "express-rate-limit";
 import {
+  archiveItem,
   completeItem,
   createItem,
   deleteItem,
@@ -11,6 +12,7 @@ import {
   listItems,
   migrate,
   seedIfEmpty,
+  unarchiveItem,
   updateItem
 } from "./db";
 import { isDateKey, toDateKey } from "../shared/dates";
@@ -136,8 +138,27 @@ app.get("/api/today", (request, response) => {
   response.json(buildToday(listItems(), today));
 });
 
-app.get("/api/items", (_request, response) => {
-  response.json(listItems());
+app.get("/api/items", (request, response) => {
+  const includeArchived = request.query.archived === "true";
+  response.json(listItems(includeArchived));
+});
+
+app.post("/api/items/:id/archive", (request, response) => {
+  const item = archiveItem(request.params.id);
+  if (!item) {
+    response.status(404).json({ error: "item not found" });
+    return;
+  }
+  response.json(item);
+});
+
+app.post("/api/items/:id/unarchive", (request, response) => {
+  const item = unarchiveItem(request.params.id);
+  if (!item) {
+    response.status(404).json({ error: "item not found" });
+    return;
+  }
+  response.json(item);
 });
 
 app.post("/api/items", (request, response) => {

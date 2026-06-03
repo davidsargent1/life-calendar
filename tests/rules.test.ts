@@ -15,6 +15,7 @@ const baseItem: LifeItem = {
   reminderLeadDays: null,
   lastCompletedAt: "2026-05-10",
   contactName: null,
+  archived: false,
   createdAt: "2026-05-01T12:00:00.000Z",
   updatedAt: "2026-05-01T12:00:00.000Z"
 };
