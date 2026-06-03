@@ -20,6 +20,16 @@ export async function createItem(input: CreateLifeItemInput): Promise<LifeItem> 
   return readJson(response);
 }
 
+export async function parseReminder(text: string): Promise<CreateLifeItemInput> {
+  const response = await fetch("/api/parse-reminder", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ text })
+  });
+
+  return readJson(response);
+}
+
 export async function completeItem(id: string, completedAt: string): Promise<LifeItem> {
   const response = await fetch(`/api/items/${id}/complete`, {
     method: "POST",
@@ -36,7 +46,8 @@ async function readJson<T>(response: Response): Promise<T> {
 
   if (!response.ok) {
     const body = isJson ? JSON.stringify(await response.json()) : await response.text();
-    throw new Error(body || response.statusText);
+    const message = extractErrorMessage(body) ?? response.statusText;
+    throw new Error(message);
   }
 
   if (!isJson) {
@@ -44,4 +55,16 @@ async function readJson<T>(response: Response): Promise<T> {
   }
 
   return response.json() as Promise<T>;
+}
+
+function extractErrorMessage(body: string): string | null {
+  try {
+    const parsed = JSON.parse(body) as unknown;
+    if (parsed && typeof parsed === "object" && "error" in parsed && typeof (parsed as Record<string, unknown>).error === "string") {
+      return (parsed as { error: string }).error;
+    }
+  } catch {
+    // not JSON — fall through
+  }
+  return body.trim() || null;
 }

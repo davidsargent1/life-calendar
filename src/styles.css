@@ -246,7 +246,8 @@ h3 {
 .add-layout {
   display: grid;
   gap: 16px;
-  grid-template-columns: 240px minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr);
+  max-width: 640px;
 }
 
 .template-strip {
@@ -268,6 +269,10 @@ h3 {
   padding: 18px;
 }
 
+.editor-panel--single {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .editor-panel label {
   color: #47524b;
   display: grid;
@@ -283,6 +288,35 @@ h3 {
   color: #17211b;
   min-height: 52px;
   padding: 0 14px;
+}
+
+.editor-panel textarea.nl-input {
+  background: #faf7ef;
+  border: 1px solid #d8cfbf;
+  border-radius: 8px;
+  color: #17211b;
+  font-family: inherit;
+  font-size: 1rem;
+  line-height: 1.5;
+  min-height: 100px;
+  padding: 12px 14px;
+  resize: vertical;
+}
+
+.char-count {
+  color: #8a8070;
+  font-size: 0.8rem;
+  margin: -8px 0 0;
+  text-align: right;
+}
+
+.add-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.add-actions button {
+  flex: 1;
 }
 
 .inline-field {
