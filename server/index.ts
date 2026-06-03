@@ -1,5 +1,5 @@
 import "dotenv/config";
-import Anthropic from "@anthropic-ai/sdk";
+import OpenAI from "openai";
 import cors from "cors";
 import express from "express";
 import { rateLimit } from "express-rate-limit";
@@ -74,12 +74,12 @@ app.post("/api/parse-reminder", parseReminderLimiter, async (request, response) 
     return;
   }
 
-  if (!process.env.ANTHROPIC_API_KEY) {
-    response.status(503).json({ error: "AI parsing is not configured — add an ANTHROPIC_API_KEY to .env" });
+  if (!process.env.OPENAI_API_KEY) {
+    response.status(503).json({ error: "AI parsing is not configured — add an OPENAI_API_KEY to .env" });
     return;
   }
 
-  const anthropic = new Anthropic();
+  const openai = new OpenAI();
 
   const systemPrompt = `You convert natural-language reminder descriptions into structured JSON for a life calendar app.
 Return ONLY valid JSON matching this TypeScript type (omit null/undefined fields):
@@ -105,14 +105,16 @@ Rules:
 - Do not include null values, only include fields that have meaningful values`;
 
   try {
-    const msg = await anthropic.messages.create({
-      model: "claude-haiku-4-5-20251001",
+    const msg = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
       max_tokens: 512,
-      system: systemPrompt,
-      messages: [{ role: "user", content: text }]
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: text }
+      ]
     });
 
-    const raw = msg.content[0].type === "text" ? msg.content[0].text.trim() : "";
+    const raw = msg.choices[0]?.message?.content?.trim() ?? "";
     const jsonMatch = raw.match(/\{[\s\S]*\}/);
 
     if (!jsonMatch) {
