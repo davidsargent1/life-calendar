@@ -269,6 +269,10 @@ h3 {
   padding: 18px;
 }
 
+.editor-panel--single {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .editor-panel label {
   color: #47524b;
   display: grid;

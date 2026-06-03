@@ -223,7 +223,7 @@ function AddView({ onCreate }: { onCreate: (input: CreateLifeItemInput) => void 
   if (draft === null) {
     return (
       <div className="add-layout">
-        <form className="editor-panel" onSubmit={handleParse}>
+        <form className="editor-panel editor-panel--single" onSubmit={handleParse}>
           <p className="eyebrow">Describe your reminder in plain English</p>
           <textarea
             autoFocus

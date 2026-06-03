@@ -2,6 +2,7 @@ import "dotenv/config";
 import Anthropic from "@anthropic-ai/sdk";
 import cors from "cors";
 import express from "express";
+import { rateLimit } from "express-rate-limit";
 import {
   completeItem,
   createItem,
@@ -18,7 +19,6 @@ import type { CreateLifeItemInput, UpdateLifeItemInput } from "../shared/types";
 
 const app = express();
 const port = Number(process.env.PORT ?? 8787);
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 migrate();
 seedIfEmpty();
@@ -26,7 +26,40 @@ seedIfEmpty();
 app.use(cors());
 app.use(express.json());
 
-app.post("/api/parse-reminder", async (request, response) => {
+const parseReminderLimiter = rateLimit({
+  windowMs: 60_000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many requests — please wait a moment and try again" }
+});
+
+const VALID_TYPES = new Set(["contact", "chore", "birthday", "shopping", "routine"]);
+
+function validateParsedReminder(raw: unknown): CreateLifeItemInput {
+  if (!raw || typeof raw !== "object") throw new Error("AI returned unexpected format");
+  const obj = raw as Record<string, unknown>;
+
+  if (typeof obj.title !== "string" || !obj.title.trim()) throw new Error("AI response missing title");
+  if (!VALID_TYPES.has(obj.type as string)) throw new Error("AI response has invalid type");
+
+  const result: CreateLifeItemInput = {
+    type: obj.type as CreateLifeItemInput["type"],
+    title: String(obj.title).trim()
+  };
+
+  if (typeof obj.category === "string") result.category = obj.category;
+  if (typeof obj.cadenceDays === "number" && obj.cadenceDays > 0) result.cadenceDays = Math.round(obj.cadenceDays);
+  if (typeof obj.dueDate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(obj.dueDate)) result.dueDate = obj.dueDate;
+  if (typeof obj.birthdayMonth === "number") result.birthdayMonth = Math.round(obj.birthdayMonth);
+  if (typeof obj.birthdayDay === "number") result.birthdayDay = Math.round(obj.birthdayDay);
+  if (typeof obj.reminderLeadDays === "number") result.reminderLeadDays = Math.round(obj.reminderLeadDays);
+  if (typeof obj.contactName === "string") result.contactName = obj.contactName;
+
+  return result;
+}
+
+app.post("/api/parse-reminder", parseReminderLimiter, async (request, response) => {
   const { text } = request.body as { text?: string };
 
   if (!text?.trim()) {
@@ -38,6 +71,13 @@ app.post("/api/parse-reminder", async (request, response) => {
     response.status(400).json({ error: "Description is too long (max 500 characters)" });
     return;
   }
+
+  if (!process.env.ANTHROPIC_API_KEY) {
+    response.status(503).json({ error: "AI parsing is not configured — add an ANTHROPIC_API_KEY to .env" });
+    return;
+  }
+
+  const anthropic = new Anthropic();
 
   const systemPrompt = `You convert natural-language reminder descriptions into structured JSON for a life calendar app.
 Return ONLY valid JSON matching this TypeScript type (omit null/undefined fields):
@@ -78,11 +118,12 @@ Rules:
       return;
     }
 
-    const parsed = JSON.parse(jsonMatch[0]) as CreateLifeItemInput;
+    const parsed = validateParsedReminder(JSON.parse(jsonMatch[0]));
     response.json(parsed);
   } catch (err) {
     const message = err instanceof Error ? err.message : "AI parsing failed";
-    response.status(500).json({ error: message });
+    response.status(500).json({ error: "AI service error — try again or fill in manually" });
+    console.error("parse-reminder error:", message);
   }
 });
 
