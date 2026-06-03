@@ -382,11 +382,6 @@ h3 {
   padding: 18px;
 }
 
-.item-row {
-  align-items: center;
-  display: flex;
-  justify-content: space-between;
-}
 
 .item-row p {
   font-size: 1.05rem;

@@ -57,11 +57,11 @@ export function seedIfEmpty(): void {
     INSERT INTO items (
       id, type, title, category, cadence_days, due_date, birthday_month,
       birthday_day, reminder_lead_days, last_completed_at, contact_name,
-      created_at, updated_at
+      archived, created_at, updated_at
     ) VALUES (
       @id, @type, @title, @category, @cadenceDays, @dueDate, @birthdayMonth,
       @birthdayDay, @reminderLeadDays, @lastCompletedAt, @contactName,
-      @createdAt, @updatedAt
+      @archived, @createdAt, @updatedAt
     )
   `);
 
@@ -149,18 +149,16 @@ export function listItems(includeArchived = false): LifeItem[] {
 }
 
 export function archiveItem(id: string): LifeItem | null {
-  const existing = getItem(id);
-  if (!existing) return null;
   const now = new Date().toISOString();
-  db.prepare("UPDATE items SET archived = 1, updated_at = ? WHERE id = ?").run(now, id);
+  const result = db.prepare("UPDATE items SET archived = 1, updated_at = ? WHERE id = ?").run(now, id);
+  if (result.changes === 0) return null;
   return getItem(id);
 }
 
 export function unarchiveItem(id: string): LifeItem | null {
-  const existing = getItem(id);
-  if (!existing) return null;
   const now = new Date().toISOString();
-  db.prepare("UPDATE items SET archived = 0, updated_at = ? WHERE id = ?").run(now, id);
+  const result = db.prepare("UPDATE items SET archived = 0, updated_at = ? WHERE id = ?").run(now, id);
+  if (result.changes === 0) return null;
   return getItem(id);
 }
 
@@ -192,11 +190,11 @@ export function createItem(input: CreateLifeItemInput): LifeItem {
     INSERT INTO items (
       id, type, title, category, cadence_days, due_date, birthday_month,
       birthday_day, reminder_lead_days, last_completed_at, contact_name,
-      created_at, updated_at
+      archived, created_at, updated_at
     ) VALUES (
       @id, @type, @title, @category, @cadenceDays, @dueDate, @birthdayMonth,
       @birthdayDay, @reminderLeadDays, @lastCompletedAt, @contactName,
-      @createdAt, @updatedAt
+      @archived, @createdAt, @updatedAt
     )
   `).run(toDbParams(item));
 

@@ -52,9 +52,9 @@ function validateParsedReminder(raw: unknown): CreateLifeItemInput {
 
   if (typeof obj.category === "string") result.category = obj.category;
   if (typeof obj.cadenceDays === "number" && obj.cadenceDays > 0) result.cadenceDays = Math.round(obj.cadenceDays);
-  if (typeof obj.dueDate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(obj.dueDate)) result.dueDate = obj.dueDate;
-  if (typeof obj.birthdayMonth === "number") result.birthdayMonth = Math.round(obj.birthdayMonth);
-  if (typeof obj.birthdayDay === "number") result.birthdayDay = Math.round(obj.birthdayDay);
+  if (typeof obj.dueDate === "string" && isDateKey(obj.dueDate)) result.dueDate = obj.dueDate;
+  if (typeof obj.birthdayMonth === "number" && obj.birthdayMonth >= 1 && obj.birthdayMonth <= 12) result.birthdayMonth = Math.round(obj.birthdayMonth);
+  if (typeof obj.birthdayDay === "number" && obj.birthdayDay >= 1 && obj.birthdayDay <= 31) result.birthdayDay = Math.round(obj.birthdayDay);
   if (typeof obj.reminderLeadDays === "number") result.reminderLeadDays = Math.round(obj.reminderLeadDays);
   if (typeof obj.contactName === "string") result.contactName = obj.contactName;
 
@@ -166,6 +166,11 @@ app.post("/api/items", (request, response) => {
 
   if (!input.title?.trim() || !input.type) {
     response.status(400).json({ error: "title and type are required" });
+    return;
+  }
+
+  if (input.cadenceDays !== undefined && input.cadenceDays !== null && input.cadenceDays <= 0) {
+    response.status(400).json({ error: "cadenceDays must be a positive number" });
     return;
   }
 
