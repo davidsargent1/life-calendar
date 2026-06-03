@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { completeItem, createItem, fetchItems, fetchToday } from "./api";
+import { completeItem, createItem, fetchItems, fetchToday, parseReminder } from "./api";
 import { formatShortDate, toDateKey } from "../shared/dates";
 import type { CreateLifeItemInput, LifeItem, LifeItemType, TodayNudge, TodayResponse } from "../shared/types";
 
@@ -13,37 +13,6 @@ const typeLabels: Record<LifeItemType, string> = {
   shopping: "Shopping"
 };
 
-const quickTemplates: Array<CreateLifeItemInput & { label: string }> = [
-  {
-    label: "Call someone",
-    type: "contact",
-    title: "Call Grandma",
-    category: "People",
-    cadenceDays: 30,
-    contactName: "Grandma"
-  },
-  {
-    label: "Clean a room",
-    type: "chore",
-    title: "Clean bathroom",
-    category: "Home",
-    cadenceDays: 7
-  },
-  {
-    label: "Shopping trip",
-    type: "shopping",
-    title: "Go grocery shopping",
-    category: "Shopping",
-    cadenceDays: 7
-  },
-  {
-    label: "Birthday gift",
-    type: "birthday",
-    title: "Buy birthday present",
-    category: "Events",
-    reminderLeadDays: 7
-  }
-];
 
 export default function App() {
   const [view, setView] = useState<View>("today");
@@ -225,12 +194,76 @@ function NudgeSection({
   );
 }
 
-function AddView({ onCreate }: { onCreate: (input: CreateLifeItemInput) => void }) {
-  const [draft, setDraft] = useState<CreateLifeItemInput>(quickTemplates[0]);
+const emptyDraft: CreateLifeItemInput = { type: "routine", title: "", category: "" };
 
-  function selectTemplate(template: CreateLifeItemInput) {
-    setDraft({ ...template });
+function AddView({ onCreate }: { onCreate: (input: CreateLifeItemInput) => void }) {
+  const [prompt, setPrompt] = useState("");
+  const [draft, setDraft] = useState<CreateLifeItemInput | null>(null);
+  const [parsing, setParsing] = useState(false);
+  const [parseError, setParseError] = useState<string | null>(null);
+
+  const MAX_PROMPT = 500;
+  const tooLong = prompt.length > MAX_PROMPT;
+
+  async function handleParse(event: React.FormEvent) {
+    event.preventDefault();
+    if (!prompt.trim() || tooLong) return;
+    setParsing(true);
+    setParseError(null);
+    try {
+      const result = await parseReminder(prompt);
+      setDraft(result);
+    } catch (err) {
+      setParseError(err instanceof Error ? err.message : "Could not parse reminder");
+    } finally {
+      setParsing(false);
+    }
   }
+
+  if (draft === null) {
+    return (
+      <div className="add-layout">
+        <form className="editor-panel editor-panel--single" onSubmit={handleParse}>
+          <p className="eyebrow">Describe your reminder in plain English</p>
+          <textarea
+            autoFocus
+            className="nl-input"
+            disabled={parsing}
+            placeholder="e.g. Call grandma every 30 days, or Buy birthday present for mom in March"
+            rows={4}
+            value={prompt}
+            onChange={(event) => setPrompt(event.target.value)}
+          />
+          <p className="char-count" style={{ color: tooLong ? "#c0392b" : undefined }}>
+            {prompt.length} / {MAX_PROMPT}
+          </p>
+          {parseError && <p className="notice">{parseError}</p>}
+          <div className="add-actions">
+            <button className="primary-action" disabled={parsing || !prompt.trim() || tooLong} type="submit">
+              {parsing ? "Thinking…" : "Create reminder"}
+            </button>
+            <button type="button" onClick={() => setDraft(emptyDraft)}>
+              Fill in manually
+            </button>
+          </div>
+        </form>
+      </div>
+    );
+  }
+
+  return <EditDraftView draft={draft} onBack={() => setDraft(null)} onCreate={onCreate} />;
+}
+
+function EditDraftView({
+  draft: initialDraft,
+  onBack,
+  onCreate
+}: {
+  draft: CreateLifeItemInput;
+  onBack: () => void;
+  onCreate: (input: CreateLifeItemInput) => void;
+}) {
+  const [draft, setDraft] = useState<CreateLifeItemInput>(initialDraft);
 
   function update<K extends keyof CreateLifeItemInput>(key: K, value: CreateLifeItemInput[K]) {
     setDraft((current) => ({ ...current, [key]: value }));
@@ -238,14 +271,6 @@ function AddView({ onCreate }: { onCreate: (input: CreateLifeItemInput) => void 
 
   return (
     <div className="add-layout">
-      <section className="template-strip">
-        {quickTemplates.map((template) => (
-          <button key={template.label} onClick={() => selectTemplate(template)}>
-            {template.label}
-          </button>
-        ))}
-      </section>
-
       <form
         className="editor-panel"
         onSubmit={(event) => {
@@ -253,6 +278,12 @@ function AddView({ onCreate }: { onCreate: (input: CreateLifeItemInput) => void 
           onCreate(draft);
         }}
       >
+        <div className="add-actions">
+          <button type="button" onClick={onBack}>
+            ← Back
+          </button>
+        </div>
+
         <label>
           Type
           <select value={draft.type} onChange={(event) => update("type", event.target.value as LifeItemType)}>
