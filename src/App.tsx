@@ -22,7 +22,7 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  async function load() {
+  async function load(_includeArchived = false) {
     setError(null);
     // Always fetch all items (including archived) so the Items view can
     // show the "Show archived" toggle when archived items exist.
