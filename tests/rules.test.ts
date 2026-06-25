@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isDateKey, toDateKey } from "../shared/dates";
+import { buildMonthGrid, isDateKey, mondayOfWeek, toDateKey } from "../shared/dates";
 import { buildToday, calculateDueDate, toNudge } from "../shared/rules";
 import type { LifeItem } from "../shared/types";
 
@@ -78,6 +78,67 @@ describe("life reminder rules", () => {
     expect(isDateKey("2026-05-19")).toBe(true);
     expect(isDateKey("bogus")).toBe(false);
     expect(isDateKey("2026-02-31")).toBe(false);
+  });
+
+  it("mondayOfWeek returns Monday for a Wednesday input", () => {
+    const wed = new Date(2026, 5, 24); // Wed Jun 24 2026
+    expect(toDateKey(mondayOfWeek(wed))).toBe("2026-06-22");
+  });
+
+  it("mondayOfWeek returns the same day for a Monday input", () => {
+    const mon = new Date(2026, 5, 22); // Mon Jun 22 2026
+    expect(toDateKey(mondayOfWeek(mon))).toBe("2026-06-22");
+  });
+
+  it("mondayOfWeek crosses year boundary correctly", () => {
+    const fri = new Date(2026, 0, 2); // Fri Jan 2 2026
+    expect(toDateKey(mondayOfWeek(fri))).toBe("2025-12-29");
+  });
+
+  it("mondayOfWeek handles Sunday as the last day of a week", () => {
+    const sun = new Date(2026, 5, 28); // Sun Jun 28 2026
+    expect(toDateKey(mondayOfWeek(sun))).toBe("2026-06-22");
+  });
+
+  it("buildMonthGrid: June 2026 starts on Monday — first cell is Jun 1", () => {
+    const grid = buildMonthGrid(2026, 5); // June (0-indexed)
+    expect(grid[0][0]).toBe("2026-06-01");
+    expect(grid[0][6]).toBe("2026-06-07");
+  });
+
+  it("buildMonthGrid: March 2026 starts on Sunday — first cell is Feb 23", () => {
+    const grid = buildMonthGrid(2026, 2); // March
+    expect(grid[0][0]).toBe("2026-02-23");
+    expect(grid[0][6]).toBe("2026-03-01");
+  });
+
+  it("buildMonthGrid: June 2026 produces 5 rows (Jun 29–Jul 5 in last row)", () => {
+    const grid = buildMonthGrid(2026, 5);
+    expect(grid).toHaveLength(5);
+    expect(grid[4][0]).toBe("2026-06-29");
+    expect(grid[4][6]).toBe("2026-07-05");
+  });
+
+  it("buildMonthGrid: March 2026 produces 6 rows (Mar 30–31 keep the last row)", () => {
+    const grid = buildMonthGrid(2026, 2);
+    expect(grid).toHaveLength(6);
+    expect(grid[5][0]).toBe("2026-03-30");
+  });
+
+  it("buildMonthGrid: drops last row when entirely outside the month", () => {
+    // October 2026 starts Thursday; last day Oct 31 is Saturday → row 6 is all November
+    const grid = buildMonthGrid(2026, 9);
+    expect(grid).toHaveLength(5);
+    expect(grid[4][5]).toBe("2026-10-31");
+  });
+
+  it("buildMonthGrid: last cell of grid is always a Sunday", () => {
+    for (const [y, m] of [[2026, 0], [2026, 5], [2026, 11]] as [number, number][]) {
+      const grid = buildMonthGrid(y, m);
+      const lastKey = grid[grid.length - 1][6];
+      const day = new Date(lastKey + "T00:00:00").getDay();
+      expect(day).toBe(0); // Sunday
+    }
   });
 
   it("groups the dashboard by urgency", () => {

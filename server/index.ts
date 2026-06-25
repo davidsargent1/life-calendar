@@ -38,6 +38,12 @@ const parseReminderLimiter = rateLimit({
 
 const VALID_TYPES = new Set(["contact", "chore", "birthday", "shopping", "routine"]);
 
+const DAYS_IN_MONTH = [0, 31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+
+function isValidBirthdayDay(month: number, day: number): boolean {
+  return month >= 1 && month <= 12 && day >= 1 && day <= DAYS_IN_MONTH[month];
+}
+
 function validateParsedReminder(raw: unknown): CreateLifeItemInput {
   if (!raw || typeof raw !== "object") throw new Error("AI returned unexpected format");
   const obj = raw as Record<string, unknown>;
@@ -54,7 +60,7 @@ function validateParsedReminder(raw: unknown): CreateLifeItemInput {
   if (typeof obj.cadenceDays === "number" && obj.cadenceDays > 0) result.cadenceDays = Math.round(obj.cadenceDays);
   if (typeof obj.dueDate === "string" && isDateKey(obj.dueDate)) result.dueDate = obj.dueDate;
   if (typeof obj.birthdayMonth === "number" && obj.birthdayMonth >= 1 && obj.birthdayMonth <= 12) result.birthdayMonth = Math.round(obj.birthdayMonth);
-  if (typeof obj.birthdayDay === "number" && obj.birthdayDay >= 1 && obj.birthdayDay <= 31) result.birthdayDay = Math.round(obj.birthdayDay);
+  if (typeof obj.birthdayDay === "number" && isValidBirthdayDay(result.birthdayMonth ?? 0, obj.birthdayDay)) result.birthdayDay = Math.round(obj.birthdayDay);
   if (typeof obj.reminderLeadDays === "number") result.reminderLeadDays = Math.round(obj.reminderLeadDays);
   if (typeof obj.contactName === "string") result.contactName = obj.contactName;
 
@@ -181,6 +187,18 @@ app.post("/api/items", (request, response) => {
     return;
   }
 
+  if (
+    (input.birthdayMonth !== undefined && input.birthdayMonth !== null) ||
+    (input.birthdayDay !== undefined && input.birthdayDay !== null)
+  ) {
+    const bm = input.birthdayMonth ?? 0;
+    const bd = input.birthdayDay ?? 0;
+    if (!isValidBirthdayDay(bm, bd)) {
+      response.status(400).json({ error: "birthdayMonth and birthdayDay must form a valid calendar date" });
+      return;
+    }
+  }
+
   response.status(201).json(createItem(input));
 });
 
@@ -195,6 +213,23 @@ app.patch("/api/items/:id", (request, response) => {
   if (input.dueDate !== undefined && input.dueDate !== null && !isDateKey(input.dueDate)) {
     response.status(400).json({ error: "dueDate must be a valid YYYY-MM-DD date" });
     return;
+  }
+
+  if (
+    (input.birthdayMonth !== undefined && input.birthdayMonth !== null) ||
+    (input.birthdayDay !== undefined && input.birthdayDay !== null)
+  ) {
+    const existing = getItem(request.params.id);
+    if (!existing) {
+      response.status(404).json({ error: "item not found" });
+      return;
+    }
+    const bm = input.birthdayMonth ?? existing.birthdayMonth ?? 0;
+    const bd = input.birthdayDay ?? existing.birthdayDay ?? 0;
+    if (!isValidBirthdayDay(bm, bd)) {
+      response.status(400).json({ error: "birthdayMonth and birthdayDay must form a valid calendar date" });
+      return;
+    }
   }
 
   const item = updateItem(request.params.id, input);
