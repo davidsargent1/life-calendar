@@ -57,6 +57,31 @@ export function formatShortDate(dateKey: string): string {
   });
 }
 
+export function buildMonthGrid(year: number, month: number): string[][] {
+  const firstOfMonth = new Date(year, month, 1);
+  const gridStart = new Date(firstOfMonth);
+  const firstDow = firstOfMonth.getDay(); // 0=Sun
+  gridStart.setDate(gridStart.getDate() - ((firstDow + 6) % 7));
+
+  const grid: string[][] = [];
+  for (let w = 0; w < 6; w++) {
+    const week: string[] = [];
+    for (let d = 0; d < 7; d++) {
+      const cell = new Date(gridStart);
+      cell.setDate(gridStart.getDate() + w * 7 + d);
+      week.push(toDateKey(cell));
+    }
+    grid.push(week);
+  }
+
+  const lastRow = grid[5];
+  if (lastRow.every(k => Number(k.slice(5, 7)) - 1 !== month)) {
+    grid.pop();
+  }
+
+  return grid;
+}
+
 export function mondayOfWeek(date: Date): Date {
   const d = new Date(date);
   d.setHours(0, 0, 0, 0);

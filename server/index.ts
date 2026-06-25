@@ -217,8 +217,13 @@ app.patch("/api/items/:id", (request, response) => {
     (input.birthdayMonth !== undefined && input.birthdayMonth !== null) ||
     (input.birthdayDay !== undefined && input.birthdayDay !== null)
   ) {
-    const bm = input.birthdayMonth ?? 0;
-    const bd = input.birthdayDay ?? 0;
+    const existing = getItem(request.params.id);
+    if (!existing) {
+      response.status(404).json({ error: "item not found" });
+      return;
+    }
+    const bm = input.birthdayMonth ?? existing.birthdayMonth ?? 0;
+    const bd = input.birthdayDay ?? existing.birthdayDay ?? 0;
     if (!isValidBirthdayDay(bm, bd)) {
       response.status(400).json({ error: "birthdayMonth and birthdayDay must form a valid calendar date" });
       return;

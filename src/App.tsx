@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { archiveItem, completeItem, createItem, fetchItems, fetchToday, parseReminder, unarchiveItem, updateItem } from "./api";
-import { formatShortDate, mondayOfWeek, toDateKey } from "../shared/dates";
+import { buildMonthGrid, formatShortDate, mondayOfWeek, toDateKey } from "../shared/dates";
 import { calculateDueDate } from "../shared/rules";
 import type { CreateLifeItemInput, LifeItem, LifeItemType, TodayNudge, TodayResponse } from "../shared/types";
 
@@ -601,29 +601,7 @@ function MonthView({ items }: { items: LifeItem[] }) {
     else setMonth(m => m + 1);
   }
 
-  // Build calendar grid with local dates so today highlighting matches todayKey
-  const firstOfMonth = new Date(year, month, 1);
-  const gridStart = new Date(firstOfMonth);
-  const firstDow = firstOfMonth.getDay(); // 0=Sun
-  gridStart.setDate(gridStart.getDate() - ((firstDow + 6) % 7));
-
-  // 6 weeks × 7 days
-  const grid: string[][] = [];
-  for (let w = 0; w < 6; w++) {
-    const week: string[] = [];
-    for (let d = 0; d < 7; d++) {
-      const cell = new Date(gridStart);
-      cell.setDate(gridStart.getDate() + w * 7 + d);
-      week.push(toDateKey(cell));
-    }
-    grid.push(week);
-  }
-
-  // Drop last row if entirely outside current month
-  const lastRow = grid[5];
-  if (lastRow.every(k => Number(k.slice(5, 7)) - 1 !== month)) {
-    grid.pop();
-  }
+  const grid = buildMonthGrid(year, month);
 
   function itemsForDay(dayKey: string): LifeItem[] {
     return dueDates.filter(({ dueKey }) => dueKey === dayKey).map(({ item }) => item);
