@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { archiveItem, completeItem, createItem, fetchItems, fetchToday, parseReminder, unarchiveItem, updateItem } from "./api";
 import { formatShortDate, toDateKey } from "../shared/dates";
+import { calculateDueDate } from "../shared/rules";
 import type { CreateLifeItemInput, LifeItem, LifeItemType, TodayNudge, TodayResponse } from "../shared/types";
 
-type View = "today" | "add" | "items";
+type View = "today" | "week" | "month" | "add" | "items";
 
 const typeLabels: Record<LifeItemType, string> = {
   birthday: "Birthday",
@@ -73,6 +74,10 @@ export default function App() {
         <TodayView today={today} onComplete={handleComplete} onAdd={() => setView("add")} />
       )}
 
+      {!loading && view === "week" && <WeekView items={items} />}
+
+      {!loading && view === "month" && <MonthView items={items} />}
+
       {!loading && view === "add" && <AddView onCreate={handleCreate} />}
 
       {!loading && view === "items" && (
@@ -112,6 +117,12 @@ function Header({
       <nav className="nav-tabs" aria-label="Main navigation">
         <button className={activeView === "today" ? "active" : ""} onClick={() => onNavigate("today")}>
           Today
+        </button>
+        <button className={activeView === "week" ? "active" : ""} onClick={() => onNavigate("week")}>
+          Week
+        </button>
+        <button className={activeView === "month" ? "active" : ""} onClick={() => onNavigate("month")}>
+          Month
         </button>
         <button className={activeView === "add" ? "active" : ""} onClick={() => onNavigate("add")}>
           Add
@@ -477,6 +488,212 @@ function ItemsView({
         </article>
       ))}
     </section>
+  );
+}
+
+const DAY_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+const MONTH_NAMES = ["January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December"];
+
+function mondayOfWeek(date: Date): Date {
+  const d = new Date(date);
+  const dow = d.getDay(); // 0=Sun
+  d.setDate(d.getDate() - ((dow + 6) % 7));
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+function WeekView({ items }: { items: LifeItem[] }) {
+  const [weekOffset, setWeekOffset] = useState(0);
+  const todayKey = toDateKey(new Date());
+  const activeItems = useMemo(() => items.filter(i => !i.archived), [items]);
+
+  // Due date per item computed once against today
+  const dueDates = useMemo(() =>
+    activeItems.map(item => ({ item, dueKey: calculateDueDate(item, todayKey) })),
+    [activeItems, todayKey]
+  );
+
+  const monday = mondayOfWeek(new Date());
+  monday.setDate(monday.getDate() + weekOffset * 7);
+
+  const days = Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(monday);
+    d.setDate(monday.getDate() + i);
+    return toDateKey(d);
+  });
+
+  const weekStart = days[0];
+  const weekEnd = days[6];
+  const rangeLabel = `${formatShortDate(weekStart)} – ${formatShortDate(weekEnd)}`;
+
+  function itemsForDay(dayKey: string): LifeItem[] {
+    return dueDates.filter(({ dueKey }) => dueKey === dayKey).map(({ item }) => item);
+  }
+
+  const overdueItems = weekOffset === 0
+    ? dueDates.filter(({ dueKey }) => dueKey !== null && dueKey < todayKey).map(({ item }) => item)
+    : [];
+
+  return (
+    <div className="cal-layout">
+      <div className="cal-nav">
+        <button className="cal-nav-btn" onClick={() => setWeekOffset(o => o - 1)}>← Prev</button>
+        <span className="cal-range-label">{rangeLabel}</span>
+        <button className="cal-nav-btn" onClick={() => setWeekOffset(o => o + 1)}>Next →</button>
+        {weekOffset !== 0 && (
+          <button className="cal-nav-btn cal-today-btn" onClick={() => setWeekOffset(0)}>Today</button>
+        )}
+      </div>
+
+      {overdueItems.length > 0 && (
+        <div className="cal-overdue-band">
+          <span className="cal-overdue-label">Overdue</span>
+          <div className="cal-overdue-items">
+            {overdueItems.map(item => (
+              <span key={item.id} className="cal-pill cal-pill--overdue">{item.title}</span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className="week-grid">
+        {days.map((dayKey, i) => {
+          const dayItems = itemsForDay(dayKey);
+          const isToday = dayKey === todayKey;
+          return (
+            <div key={dayKey} className={`week-col${isToday ? " week-col--today" : ""}`}>
+              <div className="week-col-header">
+                <span className="week-col-dayname">{DAY_NAMES[i]}</span>
+                <span className={`week-col-date${isToday ? " week-col-date--today" : ""}`}>
+                  {formatShortDate(dayKey)}
+                </span>
+              </div>
+              <div className="week-col-items">
+                {dayItems.length === 0
+                  ? <p className="cal-empty">—</p>
+                  : dayItems.map(item => (
+                    <div key={item.id} className={`cal-pill cal-pill--${item.type}`}>{item.title}</div>
+                  ))
+                }
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function MonthView({ items }: { items: LifeItem[] }) {
+  const now = new Date();
+  const [year, setYear] = useState(now.getFullYear());
+  const [month, setMonth] = useState(now.getMonth()); // 0-indexed
+  const todayKey = toDateKey(now);
+
+  const activeItems = useMemo(() => items.filter(i => !i.archived), [items]);
+
+  const dueDates = useMemo(() =>
+    activeItems.map(item => ({ item, dueKey: calculateDueDate(item, todayKey) })),
+    [activeItems, todayKey]
+  );
+
+  function prevMonth() {
+    if (month === 0) { setYear(y => y - 1); setMonth(11); }
+    else setMonth(m => m - 1);
+  }
+
+  function nextMonth() {
+    if (month === 11) { setYear(y => y + 1); setMonth(0); }
+    else setMonth(m => m + 1);
+  }
+
+  // Build calendar grid: weeks starting Monday
+  const firstOfMonth = new Date(Date.UTC(year, month, 1));
+  const gridStart = new Date(firstOfMonth);
+  // Rewind to Monday
+  const firstDow = firstOfMonth.getUTCDay(); // 0=Sun
+  gridStart.setUTCDate(gridStart.getUTCDate() - ((firstDow + 6) % 7));
+
+  // 6 weeks × 7 days
+  const grid: string[][] = [];
+  for (let w = 0; w < 6; w++) {
+    const week: string[] = [];
+    for (let d = 0; d < 7; d++) {
+      const cell = new Date(gridStart);
+      cell.setUTCDate(gridStart.getUTCDate() + w * 7 + d);
+      week.push(cell.toISOString().slice(0, 10));
+    }
+    grid.push(week);
+  }
+
+  // Drop last row if entirely outside current month
+  const lastRow = grid[5];
+  if (lastRow.every(k => Number(k.slice(5, 7)) - 1 !== month)) {
+    grid.pop();
+  }
+
+  function itemsForDay(dayKey: string): LifeItem[] {
+    return dueDates.filter(({ dueKey }) => dueKey === dayKey).map(({ item }) => item);
+  }
+
+  const overdueItems = dueDates
+    .filter(({ dueKey }) => dueKey !== null && dueKey < todayKey)
+    .map(({ item }) => item);
+
+  return (
+    <div className="cal-layout">
+      <div className="cal-nav">
+        <button className="cal-nav-btn" onClick={prevMonth}>← Prev</button>
+        <span className="cal-range-label">{MONTH_NAMES[month]} {year}</span>
+        <button className="cal-nav-btn" onClick={nextMonth}>Next →</button>
+        {(year !== now.getFullYear() || month !== now.getMonth()) && (
+          <button className="cal-nav-btn cal-today-btn" onClick={() => { setYear(now.getFullYear()); setMonth(now.getMonth()); }}>
+            Today
+          </button>
+        )}
+      </div>
+
+      {overdueItems.length > 0 && (
+        <div className="cal-overdue-band">
+          <span className="cal-overdue-label">Overdue</span>
+          <div className="cal-overdue-items">
+            {overdueItems.map(item => (
+              <span key={item.id} className="cal-pill cal-pill--overdue">{item.title}</span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className="month-grid">
+        {DAY_NAMES.map(name => (
+          <div key={name} className="month-col-header">{name}</div>
+        ))}
+        {grid.flat().map(dayKey => {
+          const inMonth = Number(dayKey.slice(5, 7)) - 1 === month;
+          const isToday = dayKey === todayKey;
+          const dayItems = itemsForDay(dayKey);
+          const dayNum = Number(dayKey.slice(8));
+          return (
+            <div
+              key={dayKey}
+              className={[
+                "month-cell",
+                inMonth ? "" : "month-cell--out",
+                isToday ? "month-cell--today" : ""
+              ].filter(Boolean).join(" ")}
+            >
+              <span className={`month-cell-num${isToday ? " month-cell-num--today" : ""}`}>{dayNum}</span>
+              <div className="month-cell-items">
+                {dayItems.map(item => (
+                  <div key={item.id} className={`cal-pill cal-pill--${item.type}`}>{item.title}</div>
+                ))}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 
