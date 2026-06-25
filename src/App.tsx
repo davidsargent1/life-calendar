@@ -14,6 +14,26 @@ const typeLabels: Record<LifeItemType, string> = {
   shopping: "Shopping"
 };
 
+// Map an arbitrary category string to a stable hue (0-359) so each
+// category gets a consistent colour without a hard-coded palette.
+function categoryHue(category: string): number {
+  let hash = 0;
+  for (let i = 0; i < category.length; i++) {
+    hash = category.charCodeAt(i) + ((hash << 5) - hash);
+    hash |= 0; // keep in 32-bit range
+  }
+  return Math.abs(hash) % 360;
+}
+
+function categoryPillStyle(category: string): React.CSSProperties {
+  const hue = categoryHue(category);
+  return { background: `hsl(${hue} 58% 87%)`, color: `hsl(${hue} 48% 26%)` };
+}
+
+function categoryDotStyle(category: string): React.CSSProperties {
+  return { background: `hsl(${categoryHue(category)} 55% 58%)` };
+}
+
 
 export default function App() {
   const [view, setView] = useState<View>("today");
@@ -196,6 +216,7 @@ function NudgeSection({
               <div>
                 <p className="nudge-message">{nudge.message}</p>
                 <p className="meta-line">
+                  <span className="cat-dot" style={categoryDotStyle(nudge.item.category)} />
                   {nudge.item.category}
                   {nudge.dueDate ? ` • ${dueLabel(nudge)}` : ""}
                 </p>
@@ -472,7 +493,11 @@ function ItemsView({
         <article className={`item-row${item.archived ? " archived" : ""}`} key={item.id}>
           <div>
             <p>{item.title}</p>
-            <span>{typeLabels[item.type]} • {item.category}</span>
+            <span>
+              {typeLabels[item.type]} •{" "}
+              <span className="cat-dot" style={categoryDotStyle(item.category)} />
+              {item.category}
+            </span>
           </div>
           <span className="item-cadence">
             {item.cadenceDays ? `Every ${item.cadenceDays} days` : item.dueDate ? formatShortDate(item.dueDate) : "Manual"}
@@ -494,6 +519,26 @@ function ItemsView({
 const DAY_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const MONTH_NAMES = ["January", "February", "March", "April", "May", "June",
   "July", "August", "September", "October", "November", "December"];
+
+function CategoryLegend({ items }: { items: LifeItem[] }) {
+  const categories = useMemo(() => {
+    const seen = new Set(items.filter(i => !i.archived).map(i => i.category).filter(Boolean));
+    return Array.from(seen).sort((a, b) => a.localeCompare(b));
+  }, [items]);
+
+  if (categories.length === 0) return null;
+
+  return (
+    <div className="cal-legend">
+      {categories.map(category => (
+        <span key={category} className="cal-legend-item">
+          <span className="cat-dot" style={categoryDotStyle(category)} />
+          {category}
+        </span>
+      ))}
+    </div>
+  );
+}
 
 function WeekView({ items }: { items: LifeItem[] }) {
   const [weekOffset, setWeekOffset] = useState(0);
@@ -543,11 +588,13 @@ function WeekView({ items }: { items: LifeItem[] }) {
           <span className="cal-overdue-label">Overdue</span>
           <div className="cal-overdue-items">
             {overdueItems.map(item => (
-              <span key={item.id} className="cal-pill cal-pill--overdue">{item.title}</span>
+              <span key={item.id} className="cal-pill" style={categoryPillStyle(item.category)}>{item.title}</span>
             ))}
           </div>
         </div>
       )}
+
+      <CategoryLegend items={items} />
 
       <div className="week-grid">
         {days.map((dayKey, i) => {
@@ -565,7 +612,7 @@ function WeekView({ items }: { items: LifeItem[] }) {
                 {dayItems.length === 0
                   ? <p className="cal-empty">—</p>
                   : dayItems.map(item => (
-                    <div key={item.id} className={`cal-pill cal-pill--${item.type}`}>{item.title}</div>
+                    <div key={item.id} className="cal-pill" style={categoryPillStyle(item.category)}>{item.title}</div>
                   ))
                 }
               </div>
@@ -634,11 +681,13 @@ function MonthView({ items }: { items: LifeItem[] }) {
           <span className="cal-overdue-label">Overdue</span>
           <div className="cal-overdue-items">
             {overdueItems.map(item => (
-              <span key={item.id} className="cal-pill cal-pill--overdue">{item.title}</span>
+              <span key={item.id} className="cal-pill" style={categoryPillStyle(item.category)}>{item.title}</span>
             ))}
           </div>
         </div>
       )}
+
+      <CategoryLegend items={items} />
 
       <div className="month-grid">
         {DAY_NAMES.map(name => (
@@ -661,7 +710,7 @@ function MonthView({ items }: { items: LifeItem[] }) {
               <span className={`month-cell-num${isToday ? " month-cell-num--today" : ""}`}>{dayNum}</span>
               <div className="month-cell-items">
                 {dayItems.map(item => (
-                  <div key={item.id} className={`cal-pill cal-pill--${item.type}`}>{item.title}</div>
+                  <div key={item.id} className="cal-pill" style={categoryPillStyle(item.category)}>{item.title}</div>
                 ))}
               </div>
             </div>
