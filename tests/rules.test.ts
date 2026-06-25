@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isDateKey, toDateKey } from "../shared/dates";
+import { isDateKey, mondayOfWeek, toDateKey } from "../shared/dates";
 import { buildToday, calculateDueDate, toNudge } from "../shared/rules";
 import type { LifeItem } from "../shared/types";
 
@@ -78,6 +78,26 @@ describe("life reminder rules", () => {
     expect(isDateKey("2026-05-19")).toBe(true);
     expect(isDateKey("bogus")).toBe(false);
     expect(isDateKey("2026-02-31")).toBe(false);
+  });
+
+  it("mondayOfWeek returns Monday for a Wednesday input", () => {
+    const wed = new Date(2026, 5, 24); // Wed Jun 24 2026
+    expect(toDateKey(mondayOfWeek(wed))).toBe("2026-06-22");
+  });
+
+  it("mondayOfWeek returns the same day for a Monday input", () => {
+    const mon = new Date(2026, 5, 22); // Mon Jun 22 2026
+    expect(toDateKey(mondayOfWeek(mon))).toBe("2026-06-22");
+  });
+
+  it("mondayOfWeek crosses year boundary correctly", () => {
+    const fri = new Date(2026, 0, 2); // Fri Jan 2 2026
+    expect(toDateKey(mondayOfWeek(fri))).toBe("2025-12-29");
+  });
+
+  it("mondayOfWeek handles Sunday as the last day of a week", () => {
+    const sun = new Date(2026, 5, 28); // Sun Jun 28 2026
+    expect(toDateKey(mondayOfWeek(sun))).toBe("2026-06-22");
   });
 
   it("groups the dashboard by urgency", () => {

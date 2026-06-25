@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { archiveItem, completeItem, createItem, fetchItems, fetchToday, parseReminder, unarchiveItem, updateItem } from "./api";
-import { formatShortDate, toDateKey } from "../shared/dates";
+import { formatShortDate, mondayOfWeek, toDateKey } from "../shared/dates";
 import { calculateDueDate } from "../shared/rules";
 import type { CreateLifeItemInput, LifeItem, LifeItemType, TodayNudge, TodayResponse } from "../shared/types";
 
@@ -22,7 +22,7 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  async function load(_includeArchived = false) {
+  async function load() {
     setError(null);
     // Always fetch all items (including archived) so the Items view can
     // show the "Show archived" toggle when archived items exist.
@@ -495,14 +495,6 @@ const DAY_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const MONTH_NAMES = ["January", "February", "March", "April", "May", "June",
   "July", "August", "September", "October", "November", "December"];
 
-function mondayOfWeek(date: Date): Date {
-  const d = new Date(date);
-  const dow = d.getDay(); // 0=Sun
-  d.setDate(d.getDate() - ((dow + 6) % 7));
-  d.setHours(0, 0, 0, 0);
-  return d;
-}
-
 function WeekView({ items }: { items: LifeItem[] }) {
   const [weekOffset, setWeekOffset] = useState(0);
   const todayKey = toDateKey(new Date());
@@ -586,10 +578,11 @@ function WeekView({ items }: { items: LifeItem[] }) {
 }
 
 function MonthView({ items }: { items: LifeItem[] }) {
-  const now = new Date();
-  const [year, setYear] = useState(now.getFullYear());
-  const [month, setMonth] = useState(now.getMonth()); // 0-indexed
-  const todayKey = toDateKey(now);
+  const todayKey = toDateKey(new Date());
+  const todayYear = Number(todayKey.slice(0, 4));
+  const todayMonth = Number(todayKey.slice(5, 7)) - 1; // 0-indexed
+  const [year, setYear] = useState(todayYear);
+  const [month, setMonth] = useState(todayMonth);
 
   const activeItems = useMemo(() => items.filter(i => !i.archived), [items]);
 
@@ -608,12 +601,11 @@ function MonthView({ items }: { items: LifeItem[] }) {
     else setMonth(m => m + 1);
   }
 
-  // Build calendar grid: weeks starting Monday
-  const firstOfMonth = new Date(Date.UTC(year, month, 1));
+  // Build calendar grid with local dates so today highlighting matches todayKey
+  const firstOfMonth = new Date(year, month, 1);
   const gridStart = new Date(firstOfMonth);
-  // Rewind to Monday
-  const firstDow = firstOfMonth.getUTCDay(); // 0=Sun
-  gridStart.setUTCDate(gridStart.getUTCDate() - ((firstDow + 6) % 7));
+  const firstDow = firstOfMonth.getDay(); // 0=Sun
+  gridStart.setDate(gridStart.getDate() - ((firstDow + 6) % 7));
 
   // 6 weeks × 7 days
   const grid: string[][] = [];
@@ -621,8 +613,8 @@ function MonthView({ items }: { items: LifeItem[] }) {
     const week: string[] = [];
     for (let d = 0; d < 7; d++) {
       const cell = new Date(gridStart);
-      cell.setUTCDate(gridStart.getUTCDate() + w * 7 + d);
-      week.push(cell.toISOString().slice(0, 10));
+      cell.setDate(gridStart.getDate() + w * 7 + d);
+      week.push(toDateKey(cell));
     }
     grid.push(week);
   }
@@ -637,9 +629,10 @@ function MonthView({ items }: { items: LifeItem[] }) {
     return dueDates.filter(({ dueKey }) => dueKey === dayKey).map(({ item }) => item);
   }
 
-  const overdueItems = dueDates
-    .filter(({ dueKey }) => dueKey !== null && dueKey < todayKey)
-    .map(({ item }) => item);
+  const isCurrentMonth = year === todayYear && month === todayMonth;
+  const overdueItems = isCurrentMonth
+    ? dueDates.filter(({ dueKey }) => dueKey !== null && dueKey < todayKey).map(({ item }) => item)
+    : [];
 
   return (
     <div className="cal-layout">
@@ -647,8 +640,12 @@ function MonthView({ items }: { items: LifeItem[] }) {
         <button className="cal-nav-btn" onClick={prevMonth}>← Prev</button>
         <span className="cal-range-label">{MONTH_NAMES[month]} {year}</span>
         <button className="cal-nav-btn" onClick={nextMonth}>Next →</button>
-        {(year !== now.getFullYear() || month !== now.getMonth()) && (
-          <button className="cal-nav-btn cal-today-btn" onClick={() => { setYear(now.getFullYear()); setMonth(now.getMonth()); }}>
+        {!isCurrentMonth && (
+          <button className="cal-nav-btn cal-today-btn" onClick={() => {
+            const now = new Date();
+            setYear(now.getFullYear());
+            setMonth(now.getMonth());
+          }}>
             Today
           </button>
         )}

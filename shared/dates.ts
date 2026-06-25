@@ -57,6 +57,14 @@ export function formatShortDate(dateKey: string): string {
   });
 }
 
+export function mondayOfWeek(date: Date): Date {
+  const d = new Date(date);
+  d.setHours(0, 0, 0, 0);
+  const dow = d.getDay(); // 0=Sun
+  d.setDate(d.getDate() - ((dow + 6) % 7));
+  return d;
+}
+
 function toUtcDateKey(date: Date): string {
   return date.toISOString().slice(0, 10);
 }
