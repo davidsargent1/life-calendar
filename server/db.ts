@@ -212,7 +212,7 @@ export function updateItem(id: string, input: UpdateLifeItemInput): LifeItem | n
     ...existing,
     ...input,
     title: input.title?.trim() ?? existing.title,
-    category: input.category?.trim() ?? existing.category,
+    category: input.category?.trim() || existing.category,
     contactName: input.contactName?.trim() ?? existing.contactName,
     updatedAt: new Date().toISOString()
   };
