@@ -609,7 +609,9 @@ function CategoryFilter({ items, hiddenCategories, onToggleCategory, onShowAll }
 
   if (categories.length === 0) return null;
 
-  const anyHidden = categories.some(category => hiddenCategories.has(category));
+  // Base this on the hidden set itself, not the visible category list, so the
+  // reset stays reachable even if a hidden category's items were all archived.
+  const anyHidden = hiddenCategories.size > 0;
 
   return (
     <div className="cal-filter">
