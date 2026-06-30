@@ -2,6 +2,7 @@ import Database from "better-sqlite3";
 import { mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { toDateKey } from "../shared/dates";
+import { normalizeCategory } from "../shared/categories";
 import type { CreateLifeItemInput, LifeItem, UpdateLifeItemInput } from "../shared/types";
 
 const dbPath = join(process.cwd(), "data", "life-calendar.sqlite");
@@ -173,7 +174,7 @@ export function createItem(input: CreateLifeItemInput): LifeItem {
     id: crypto.randomUUID(),
     type: input.type,
     title: input.title.trim(),
-    category: input.category?.trim() || defaultCategory(input.type),
+    category: normalizeCategory(input.category ?? "") || defaultCategory(input.type),
     cadenceDays: input.cadenceDays ?? null,
     dueDate: input.dueDate ?? null,
     birthdayMonth: input.birthdayMonth ?? null,
@@ -212,7 +213,7 @@ export function updateItem(id: string, input: UpdateLifeItemInput): LifeItem | n
     ...existing,
     ...input,
     title: input.title?.trim() ?? existing.title,
-    category: input.category?.trim() || existing.category,
+    category: normalizeCategory(input.category ?? "") || existing.category,
     contactName: input.contactName?.trim() ?? existing.contactName,
     updatedAt: new Date().toISOString()
   };
@@ -311,9 +312,9 @@ function toDbParams(item: LifeItem): Record<string, string | number | null> {
 function defaultCategory(type: LifeItem["type"]): string {
   const categories: Record<LifeItem["type"], string> = {
     birthday: "Events",
-    chore: "Home",
+    chore: "Chores",
     contact: "People",
-    routine: "Routine",
+    routine: "Home",
     shopping: "Shopping"
   };
 
