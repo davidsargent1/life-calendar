@@ -491,19 +491,64 @@ h3 {
   width: 9px;
 }
 
-.cal-legend {
+/* Interactive legend + category filter for the calendar views. */
+.cal-filter {
   align-items: center;
   display: flex;
   flex-wrap: wrap;
-  gap: 6px 16px;
+  gap: 8px 12px;
 }
 
-.cal-legend-item {
+.cal-filter-label {
+  color: #66716b;
+  font-size: 0.78rem;
+  font-weight: 900;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.cal-filter-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.cal-filter-chip {
   align-items: center;
-  color: #5a6560;
+  background: #fffdf8;
+  border: 1px solid #dfd8c8;
+  border-radius: 999px;
+  color: #3a5245;
   display: inline-flex;
+  font-size: 0.85rem;
+  font-weight: 700;
+  min-height: 36px;
+  padding: 0 14px;
+  transition: opacity 0.12s ease;
+}
+
+.cal-filter-chip:hover {
+  background: #f0eadc;
+}
+
+.cal-filter-chip--off {
+  opacity: 0.42;
+  text-decoration: line-through;
+}
+
+.cal-filter-reset {
+  background: transparent;
+  border: 1px solid #d8cfbf;
+  border-radius: 999px;
+  color: #3a5245;
   font-size: 0.8rem;
   font-weight: 700;
+  min-height: 36px;
+  padding: 0 14px;
+}
+
+.cal-filter-reset:hover {
+  background: #e8dfcf;
 }
 
 /* ── Week view ───────────────────────────────────────────────── */

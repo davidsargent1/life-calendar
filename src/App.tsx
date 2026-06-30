@@ -44,6 +44,26 @@ export default function App() {
   const [items, setItems] = useState<LifeItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // Categories hidden from the calendar views. Shared across Week and Month
+  // so the filter persists when switching between them. Opt-out: empty = all
+  // shown, so newly added categories appear by default.
+  const [hiddenCategories, setHiddenCategories] = useState<Set<string>>(() => new Set());
+
+  function toggleCategory(category: string) {
+    setHiddenCategories((prev) => {
+      const next = new Set(prev);
+      if (next.has(category)) {
+        next.delete(category);
+      } else {
+        next.add(category);
+      }
+      return next;
+    });
+  }
+
+  function showAllCategories() {
+    setHiddenCategories(new Set());
+  }
 
   async function load(_includeArchived = false) {
     setError(null);
@@ -97,9 +117,23 @@ export default function App() {
         <TodayView today={today} onComplete={handleComplete} onAdd={() => setView("add")} />
       )}
 
-      {!loading && view === "week" && <WeekView items={items} />}
+      {!loading && view === "week" && (
+        <WeekView
+          items={items}
+          hiddenCategories={hiddenCategories}
+          onToggleCategory={toggleCategory}
+          onShowAll={showAllCategories}
+        />
+      )}
 
-      {!loading && view === "month" && <MonthView items={items} />}
+      {!loading && view === "month" && (
+        <MonthView
+          items={items}
+          hiddenCategories={hiddenCategories}
+          onToggleCategory={toggleCategory}
+          onShowAll={showAllCategories}
+        />
+      )}
 
       {!loading && view === "add" && <AddView onCreate={handleCreate} />}
 
@@ -558,7 +592,16 @@ const DAY_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const MONTH_NAMES = ["January", "February", "March", "April", "May", "June",
   "July", "August", "September", "October", "November", "December"];
 
-function CategoryLegend({ items }: { items: LifeItem[] }) {
+type CalendarViewProps = {
+  items: LifeItem[];
+  hiddenCategories: Set<string>;
+  onToggleCategory: (category: string) => void;
+  onShowAll: () => void;
+};
+
+// Interactive legend + filter: lists every category the user has (so hidden
+// ones stay reachable) and toggles them in/out of the calendar on click.
+function CategoryFilter({ items, hiddenCategories, onToggleCategory, onShowAll }: CalendarViewProps) {
   const categories = useMemo(() => {
     const seen = new Set(items.filter(i => !i.archived).map(i => i.category).filter(Boolean));
     return Array.from(seen).sort((a, b) => a.localeCompare(b));
@@ -566,22 +609,44 @@ function CategoryLegend({ items }: { items: LifeItem[] }) {
 
   if (categories.length === 0) return null;
 
+  const anyHidden = categories.some(category => hiddenCategories.has(category));
+
   return (
-    <div className="cal-legend">
-      {categories.map(category => (
-        <span key={category} className="cal-legend-item">
-          <span className="cat-dot" style={categoryDotStyle(category)} />
-          {category}
-        </span>
-      ))}
+    <div className="cal-filter">
+      <span className="cal-filter-label">Filter</span>
+      <div className="cal-filter-chips">
+        {categories.map(category => {
+          const off = hiddenCategories.has(category);
+          return (
+            <button
+              key={category}
+              type="button"
+              aria-pressed={!off}
+              className={`cal-filter-chip${off ? " cal-filter-chip--off" : ""}`}
+              onClick={() => onToggleCategory(category)}
+            >
+              <span className="cat-dot" style={categoryDotStyle(category)} />
+              {category}
+            </button>
+          );
+        })}
+      </div>
+      {anyHidden && (
+        <button type="button" className="cal-filter-reset" onClick={onShowAll}>
+          Show all
+        </button>
+      )}
     </div>
   );
 }
 
-function WeekView({ items }: { items: LifeItem[] }) {
+function WeekView({ items, hiddenCategories, onToggleCategory, onShowAll }: CalendarViewProps) {
   const [weekOffset, setWeekOffset] = useState(0);
   const todayKey = toDateKey(new Date());
-  const activeItems = useMemo(() => items.filter(i => !i.archived), [items]);
+  const activeItems = useMemo(
+    () => items.filter(i => !i.archived && !hiddenCategories.has(i.category)),
+    [items, hiddenCategories]
+  );
 
   // Due date per item computed once against today
   const dueDates = useMemo(() =>
@@ -632,7 +697,12 @@ function WeekView({ items }: { items: LifeItem[] }) {
         </div>
       )}
 
-      <CategoryLegend items={items} />
+      <CategoryFilter
+        items={items}
+        hiddenCategories={hiddenCategories}
+        onToggleCategory={onToggleCategory}
+        onShowAll={onShowAll}
+      />
 
       <div className="week-grid">
         {days.map((dayKey, i) => {
@@ -662,14 +732,17 @@ function WeekView({ items }: { items: LifeItem[] }) {
   );
 }
 
-function MonthView({ items }: { items: LifeItem[] }) {
+function MonthView({ items, hiddenCategories, onToggleCategory, onShowAll }: CalendarViewProps) {
   const todayKey = toDateKey(new Date());
   const todayYear = Number(todayKey.slice(0, 4));
   const todayMonth = Number(todayKey.slice(5, 7)) - 1; // 0-indexed
   const [year, setYear] = useState(todayYear);
   const [month, setMonth] = useState(todayMonth);
 
-  const activeItems = useMemo(() => items.filter(i => !i.archived), [items]);
+  const activeItems = useMemo(
+    () => items.filter(i => !i.archived && !hiddenCategories.has(i.category)),
+    [items, hiddenCategories]
+  );
 
   const dueDates = useMemo(() =>
     activeItems.map(item => ({ item, dueKey: calculateDueDate(item, todayKey) })),
@@ -725,7 +798,12 @@ function MonthView({ items }: { items: LifeItem[] }) {
         </div>
       )}
 
-      <CategoryLegend items={items} />
+      <CategoryFilter
+        items={items}
+        hiddenCategories={hiddenCategories}
+        onToggleCategory={onToggleCategory}
+        onShowAll={onShowAll}
+      />
 
       <div className="month-grid">
         {DAY_NAMES.map(name => (
