@@ -214,7 +214,9 @@ export function updateItem(id: string, input: UpdateLifeItemInput): LifeItem | n
     ...input,
     title: input.title?.trim() ?? existing.title,
     category: normalizeCategory(input.category ?? "") || existing.category,
-    contactName: input.contactName?.trim() ?? existing.contactName,
+    // Distinguish "omitted" (keep existing) from an explicit null/empty (clear),
+    // so switching an item's type can drop a now-irrelevant Person.
+    contactName: input.contactName === undefined ? existing.contactName : (input.contactName?.trim() || null),
     updatedAt: new Date().toISOString()
   };
 

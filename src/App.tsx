@@ -331,6 +331,26 @@ function AddView({ onCreate }: { onCreate: (input: CreateLifeItemInput) => void 
   return <EditDraftView draft={draft} onBack={() => setDraft(null)} onCreate={onCreate} />;
 }
 
+// Build the save payload from only the fields that apply to the chosen type,
+// sending explicit nulls for the rest. Without this, switching type would
+// silently persist stale values from hidden fields (e.g. a birthday keeping
+// the cadenceDays it had as a chore).
+function applicablePayload(draft: CreateLifeItemInput): CreateLifeItemInput {
+  const isBirthday = draft.type === "birthday";
+  const showPerson = isBirthday || draft.type === "contact";
+  return {
+    type: draft.type,
+    title: draft.title,
+    category: draft.category,
+    cadenceDays: isBirthday ? null : draft.cadenceDays ?? null,
+    dueDate: isBirthday ? null : draft.dueDate ?? null,
+    birthdayMonth: isBirthday ? draft.birthdayMonth ?? null : null,
+    birthdayDay: isBirthday ? draft.birthdayDay ?? null : null,
+    reminderLeadDays: isBirthday ? draft.reminderLeadDays ?? null : null,
+    contactName: showPerson ? draft.contactName ?? null : null
+  };
+}
+
 function EditDraftView({
   draft: initialDraft,
   onBack,
@@ -351,17 +371,21 @@ function EditDraftView({
     setDraft((current) => ({ ...current, [key]: value }));
   }
 
+  // Only show the fields that apply to the selected type.
+  const isBirthday = draft.type === "birthday";
+  const showPerson = isBirthday || draft.type === "contact";
+
   return (
     <div className="add-layout">
       <form
         className="editor-panel"
         onSubmit={(event) => {
           event.preventDefault();
-          onCreate(draft);
+          onCreate(applicablePayload(draft));
         }}
       >
-        <div className="add-actions">
-          <button type="button" onClick={onBack}>
+        <div className="editor-back-row">
+          <button type="button" className="editor-back" onClick={onBack}>
             ← Back
           </button>
         </div>
@@ -419,29 +443,36 @@ function EditDraftView({
           </label>
         )}
 
-        <label>
-          Repeat every
-          <div className="inline-field">
-            <input
-              min="1"
-              type="number"
-              value={draft.cadenceDays ?? ""}
-              onChange={(event) => update("cadenceDays", event.target.value ? Number(event.target.value) : null)}
-            />
-            <span>days</span>
-          </div>
-        </label>
+        {!isBirthday && (
+          <label>
+            Repeat every
+            <div className="inline-field">
+              <input
+                min="1"
+                type="number"
+                value={draft.cadenceDays ?? ""}
+                onChange={(event) => update("cadenceDays", event.target.value ? Number(event.target.value) : null)}
+              />
+              <span>days</span>
+            </div>
+          </label>
+        )}
 
-        <label>
-          Due date
-          <input value={draft.dueDate ?? ""} type="date" onChange={(event) => update("dueDate", event.target.value || null)} />
-        </label>
+        {!isBirthday && (
+          <label>
+            Due date
+            <input value={draft.dueDate ?? ""} type="date" onChange={(event) => update("dueDate", event.target.value || null)} />
+          </label>
+        )}
 
-        <label>
-          Person
-          <input value={draft.contactName ?? ""} onChange={(event) => update("contactName", event.target.value || null)} />
-        </label>
+        {showPerson && (
+          <label>
+            Person
+            <input value={draft.contactName ?? ""} onChange={(event) => update("contactName", event.target.value || null)} />
+          </label>
+        )}
 
+        {isBirthday && (
         <div className="birthday-row">
           <label>
             Birthday month
@@ -473,6 +504,7 @@ function EditDraftView({
             />
           </label>
         </div>
+        )}
 
         <button className="primary-action" type="submit">
           {saveLabel}
