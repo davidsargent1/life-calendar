@@ -317,6 +317,10 @@ function EditDraftView({
     setDraft((current) => ({ ...current, [key]: value }));
   }
 
+  // Only show the fields that apply to the selected type.
+  const isBirthday = draft.type === "birthday";
+  const showPerson = isBirthday || draft.type === "contact";
+
   return (
     <div className="add-layout">
       <form
@@ -326,8 +330,8 @@ function EditDraftView({
           onCreate(draft);
         }}
       >
-        <div className="add-actions">
-          <button type="button" onClick={onBack}>
+        <div className="editor-back-row">
+          <button type="button" className="editor-back" onClick={onBack}>
             ← Back
           </button>
         </div>
@@ -385,29 +389,36 @@ function EditDraftView({
           </label>
         )}
 
-        <label>
-          Repeat every
-          <div className="inline-field">
-            <input
-              min="1"
-              type="number"
-              value={draft.cadenceDays ?? ""}
-              onChange={(event) => update("cadenceDays", event.target.value ? Number(event.target.value) : null)}
-            />
-            <span>days</span>
-          </div>
-        </label>
+        {!isBirthday && (
+          <label>
+            Repeat every
+            <div className="inline-field">
+              <input
+                min="1"
+                type="number"
+                value={draft.cadenceDays ?? ""}
+                onChange={(event) => update("cadenceDays", event.target.value ? Number(event.target.value) : null)}
+              />
+              <span>days</span>
+            </div>
+          </label>
+        )}
 
-        <label>
-          Due date
-          <input value={draft.dueDate ?? ""} type="date" onChange={(event) => update("dueDate", event.target.value || null)} />
-        </label>
+        {!isBirthday && (
+          <label>
+            Due date
+            <input value={draft.dueDate ?? ""} type="date" onChange={(event) => update("dueDate", event.target.value || null)} />
+          </label>
+        )}
 
-        <label>
-          Person
-          <input value={draft.contactName ?? ""} onChange={(event) => update("contactName", event.target.value || null)} />
-        </label>
+        {showPerson && (
+          <label>
+            Person
+            <input value={draft.contactName ?? ""} onChange={(event) => update("contactName", event.target.value || null)} />
+          </label>
+        )}
 
+        {isBirthday && (
         <div className="birthday-row">
           <label>
             Birthday month
@@ -439,6 +450,7 @@ function EditDraftView({
             />
           </label>
         </div>
+        )}
 
         <button className="primary-action" type="submit">
           {saveLabel}
