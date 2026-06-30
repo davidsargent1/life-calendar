@@ -297,6 +297,26 @@ function AddView({ onCreate }: { onCreate: (input: CreateLifeItemInput) => void 
   return <EditDraftView draft={draft} onBack={() => setDraft(null)} onCreate={onCreate} />;
 }
 
+// Build the save payload from only the fields that apply to the chosen type,
+// sending explicit nulls for the rest. Without this, switching type would
+// silently persist stale values from hidden fields (e.g. a birthday keeping
+// the cadenceDays it had as a chore).
+function applicablePayload(draft: CreateLifeItemInput): CreateLifeItemInput {
+  const isBirthday = draft.type === "birthday";
+  const showPerson = isBirthday || draft.type === "contact";
+  return {
+    type: draft.type,
+    title: draft.title,
+    category: draft.category,
+    cadenceDays: isBirthday ? null : draft.cadenceDays ?? null,
+    dueDate: isBirthday ? null : draft.dueDate ?? null,
+    birthdayMonth: isBirthday ? draft.birthdayMonth ?? null : null,
+    birthdayDay: isBirthday ? draft.birthdayDay ?? null : null,
+    reminderLeadDays: isBirthday ? draft.reminderLeadDays ?? null : null,
+    contactName: showPerson ? draft.contactName ?? null : null
+  };
+}
+
 function EditDraftView({
   draft: initialDraft,
   onBack,
@@ -327,7 +347,7 @@ function EditDraftView({
         className="editor-panel"
         onSubmit={(event) => {
           event.preventDefault();
-          onCreate(draft);
+          onCreate(applicablePayload(draft));
         }}
       >
         <div className="editor-back-row">
