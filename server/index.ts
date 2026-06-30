@@ -16,6 +16,7 @@ import {
   updateItem
 } from "./db";
 import { isDateKey, toDateKey } from "../shared/dates";
+import { PRESET_CATEGORIES } from "../shared/categories";
 import { buildToday } from "../shared/rules";
 import type { CreateLifeItemInput, UpdateLifeItemInput } from "../shared/types";
 
@@ -107,7 +108,7 @@ Rules:
 - "shopping" type = buying things
 - "routine" type = personal habits
 - cadenceDays = how often to repeat in days (e.g. "every 2 weeks" = 14)
-- category should be a short label like "People", "Home", "Health", "Shopping", "Events"
+- category should be one of these preferred labels when one fits: ${PRESET_CATEGORIES.join(", ")}. Only invent a new short label if none of these apply
 - Do not include null values, only include fields that have meaningful values`;
 
   try {

@@ -1,8 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { archiveItem, completeItem, createItem, fetchItems, fetchToday, parseReminder, unarchiveItem, updateItem } from "./api";
 import { buildMonthGrid, formatShortDate, mondayOfWeek, toDateKey } from "../shared/dates";
+import { PRESET_CATEGORIES, isPresetCategory } from "../shared/categories";
 import { calculateDueDate } from "../shared/rules";
 import type { CreateLifeItemInput, LifeItem, LifeItemType, TodayNudge, TodayResponse } from "../shared/types";
+
+const CUSTOM_CATEGORY = "__custom__";
 
 type View = "today" | "week" | "month" | "add" | "items";
 
@@ -306,6 +309,9 @@ function EditDraftView({
   saveLabel?: string;
 }) {
   const [draft, setDraft] = useState<CreateLifeItemInput>(initialDraft);
+  const [useCustomCategory, setUseCustomCategory] = useState(() =>
+    initialDraft.category ? !isPresetCategory(initialDraft.category) : false
+  );
 
   function update<K extends keyof CreateLifeItemInput>(key: K, value: CreateLifeItemInput[K]) {
     setDraft((current) => ({ ...current, [key]: value }));
@@ -344,8 +350,40 @@ function EditDraftView({
 
         <label>
           Category
-          <input value={draft.category ?? ""} onChange={(event) => update("category", event.target.value)} />
+          <select
+            value={useCustomCategory ? CUSTOM_CATEGORY : (draft.category ?? "")}
+            onChange={(event) => {
+              const value = event.target.value;
+              if (value === CUSTOM_CATEGORY) {
+                setUseCustomCategory(true);
+                update("category", "");
+              } else {
+                setUseCustomCategory(false);
+                update("category", value);
+              }
+            }}
+          >
+            <option value="">Default for type</option>
+            {PRESET_CATEGORIES.map((category) => (
+              <option key={category} value={category}>
+                {category}
+              </option>
+            ))}
+            <option value={CUSTOM_CATEGORY}>Other…</option>
+          </select>
         </label>
+
+        {useCustomCategory && (
+          <label>
+            Custom category
+            <input
+              autoFocus
+              placeholder="e.g. Garden"
+              value={draft.category ?? ""}
+              onChange={(event) => update("category", event.target.value)}
+            />
+          </label>
+        )}
 
         <label>
           Repeat every
