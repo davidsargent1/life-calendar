@@ -3,6 +3,7 @@ import { archiveItem, completeItem, createItem, fetchItems, fetchToday, parseRem
 import { buildMonthGrid, formatShortDate, mondayOfWeek, toDateKey } from "../shared/dates";
 import { PRESET_CATEGORIES, isPresetCategory } from "../shared/categories";
 import { calculateDueDate } from "../shared/rules";
+import { applicablePayload, initialRepeatMode, itemToDraft, type RepeatMode } from "./reminderDraft";
 import type { CreateLifeItemInput, LifeItem, LifeItemType, TodayNudge, TodayResponse } from "../shared/types";
 
 const CUSTOM_CATEGORY = "__custom__";
@@ -35,14 +36,6 @@ function categoryPillStyle(category: string): React.CSSProperties {
 
 function categoryDotStyle(category: string): React.CSSProperties {
   return { background: `hsl(${categoryHue(category)} 55% 58%)` };
-}
-
-type RepeatMode = "interval" | "monthly" | "oneoff";
-
-function initialRepeatMode(draft: CreateLifeItemInput): RepeatMode {
-  if (draft.monthlyWeek != null && draft.monthlyWeekday != null) return "monthly";
-  if (draft.dueDate) return "oneoff";
-  return "interval";
 }
 
 const WEEKDAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
@@ -362,28 +355,6 @@ function AddView({ onCreate }: { onCreate: (input: CreateLifeItemInput) => void 
   return <EditDraftView draft={draft} onBack={() => setDraft(null)} onCreate={onCreate} />;
 }
 
-// Build the save payload from only the fields that apply to the chosen type,
-// sending explicit nulls for the rest. Without this, switching type would
-// silently persist stale values from hidden fields (e.g. a birthday keeping
-// the cadenceDays it had as a chore).
-function applicablePayload(draft: CreateLifeItemInput): CreateLifeItemInput {
-  const isBirthday = draft.type === "birthday";
-  const showPerson = isBirthday || draft.type === "contact";
-  return {
-    type: draft.type,
-    title: draft.title,
-    category: draft.category,
-    cadenceDays: isBirthday ? null : draft.cadenceDays ?? null,
-    dueDate: isBirthday ? null : draft.dueDate ?? null,
-    monthlyWeek: isBirthday ? null : draft.monthlyWeek ?? null,
-    monthlyWeekday: isBirthday ? null : draft.monthlyWeekday ?? null,
-    birthdayMonth: isBirthday ? draft.birthdayMonth ?? null : null,
-    birthdayDay: isBirthday ? draft.birthdayDay ?? null : null,
-    reminderLeadDays: isBirthday ? draft.reminderLeadDays ?? null : null,
-    contactName: showPerson ? draft.contactName ?? null : null
-  };
-}
-
 function EditDraftView({
   draft: initialDraft,
   onBack,
@@ -646,20 +617,9 @@ function ItemsView({
   const visible = showArchived ? items : active;
 
   if (editingItem) {
-    const draft: CreateLifeItemInput = {
-      type: editingItem.type,
-      title: editingItem.title,
-      category: editingItem.category,
-      cadenceDays: editingItem.cadenceDays,
-      dueDate: editingItem.dueDate,
-      birthdayMonth: editingItem.birthdayMonth,
-      birthdayDay: editingItem.birthdayDay,
-      reminderLeadDays: editingItem.reminderLeadDays,
-      contactName: editingItem.contactName
-    };
     return (
       <EditDraftView
-        draft={draft}
+        draft={itemToDraft(editingItem)}
         onBack={() => setEditingItem(null)}
         onCreate={handleSaveEdit}
         saveLabel="Save changes"
