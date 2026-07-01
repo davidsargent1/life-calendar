@@ -45,6 +45,21 @@ function isValidBirthdayDay(month: number, day: number): boolean {
   return month >= 1 && month <= 12 && day >= 1 && day <= DAYS_IN_MONTH[month];
 }
 
+const VALID_MONTHLY_WEEKS = new Set([1, 2, 3, 4, -1]);
+
+// A monthly "nth weekday" schedule needs both parts: week 1-4 (or -1 = last)
+// and weekday 0 (Sun) - 6 (Sat).
+function isValidMonthly(week: unknown, weekday: unknown): boolean {
+  return (
+    typeof week === "number" &&
+    VALID_MONTHLY_WEEKS.has(week) &&
+    typeof weekday === "number" &&
+    Number.isInteger(weekday) &&
+    weekday >= 0 &&
+    weekday <= 6
+  );
+}
+
 function validateParsedReminder(raw: unknown): CreateLifeItemInput {
   if (!raw || typeof raw !== "object") throw new Error("AI returned unexpected format");
   const obj = raw as Record<string, unknown>;
@@ -63,6 +78,10 @@ function validateParsedReminder(raw: unknown): CreateLifeItemInput {
   if (typeof obj.birthdayMonth === "number" && obj.birthdayMonth >= 1 && obj.birthdayMonth <= 12) result.birthdayMonth = Math.round(obj.birthdayMonth);
   if (typeof obj.birthdayDay === "number" && isValidBirthdayDay(result.birthdayMonth ?? 0, obj.birthdayDay)) result.birthdayDay = Math.round(obj.birthdayDay);
   if (typeof obj.reminderLeadDays === "number") result.reminderLeadDays = Math.round(obj.reminderLeadDays);
+  if (isValidMonthly(obj.monthlyWeek, obj.monthlyWeekday)) {
+    result.monthlyWeek = obj.monthlyWeek as number;
+    result.monthlyWeekday = obj.monthlyWeekday as number;
+  }
   if (typeof obj.contactName === "string") result.contactName = obj.contactName;
 
   return result;
@@ -99,6 +118,8 @@ Return ONLY valid JSON matching this TypeScript type (omit null/undefined fields
   birthdayMonth?: number, // 1-12
   birthdayDay?: number,   // 1-31
   reminderLeadDays?: number,
+  monthlyWeek?: number,    // 1-4 or -1 (last)
+  monthlyWeekday?: number, // 0 (Sun) - 6 (Sat)
   contactName?: string
 }
 Rules:
@@ -108,6 +129,7 @@ Rules:
 - "shopping" type = buying things
 - "routine" type = personal habits
 - cadenceDays = how often to repeat in days (e.g. "every 2 weeks" = 14)
+- for "nth weekday of the month" recurrences (e.g. "every 3rd Thursday", "last Monday") set monthlyWeek (1-4, or -1 for last) and monthlyWeekday (0=Sunday..6=Saturday) instead of cadenceDays
 - category should be one of these preferred labels when one fits: ${PRESET_CATEGORIES.join(", ")}. Only invent a new short label if none of these apply
 - Do not include null values, only include fields that have meaningful values`;
 
@@ -200,6 +222,16 @@ app.post("/api/items", (request, response) => {
     }
   }
 
+  if (
+    (input.monthlyWeek !== undefined && input.monthlyWeek !== null) ||
+    (input.monthlyWeekday !== undefined && input.monthlyWeekday !== null)
+  ) {
+    if (!isValidMonthly(input.monthlyWeek, input.monthlyWeekday)) {
+      response.status(400).json({ error: "monthlyWeek must be 1-4 or -1 (last) and monthlyWeekday must be 0-6, both together" });
+      return;
+    }
+  }
+
   response.status(201).json(createItem(input));
 });
 
@@ -229,6 +261,23 @@ app.patch("/api/items/:id", (request, response) => {
     const bd = input.birthdayDay ?? existing.birthdayDay ?? 0;
     if (!isValidBirthdayDay(bm, bd)) {
       response.status(400).json({ error: "birthdayMonth and birthdayDay must form a valid calendar date" });
+      return;
+    }
+  }
+
+  if (
+    (input.monthlyWeek !== undefined && input.monthlyWeek !== null) ||
+    (input.monthlyWeekday !== undefined && input.monthlyWeekday !== null)
+  ) {
+    const existing = getItem(request.params.id);
+    if (!existing) {
+      response.status(404).json({ error: "item not found" });
+      return;
+    }
+    const mw = input.monthlyWeek ?? existing.monthlyWeek;
+    const mwd = input.monthlyWeekday ?? existing.monthlyWeekday;
+    if (!isValidMonthly(mw, mwd)) {
+      response.status(400).json({ error: "monthlyWeek must be 1-4 or -1 (last) and monthlyWeekday must be 0-6, both together" });
       return;
     }
   }

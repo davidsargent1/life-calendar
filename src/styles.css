@@ -397,6 +397,12 @@ h3 {
   grid-template-columns: 96px auto;
 }
 
+.monthly-fields {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: 1fr 1fr;
+}
+
 .birthday-row {
   display: grid;
   gap: 12px;

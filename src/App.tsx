@@ -3,6 +3,7 @@ import { archiveItem, completeItem, createItem, fetchItems, fetchToday, parseRem
 import { buildMonthGrid, formatShortDate, mondayOfWeek, toDateKey } from "../shared/dates";
 import { PRESET_CATEGORIES, isPresetCategory } from "../shared/categories";
 import { calculateDueDate } from "../shared/rules";
+import { applicablePayload, initialRepeatMode, itemToDraft, type RepeatMode } from "./reminderDraft";
 import type { CreateLifeItemInput, LifeItem, LifeItemType, TodayNudge, TodayResponse } from "../shared/types";
 
 const CUSTOM_CATEGORY = "__custom__";
@@ -35,6 +36,29 @@ function categoryPillStyle(category: string): React.CSSProperties {
 
 function categoryDotStyle(category: string): React.CSSProperties {
   return { background: `hsl(${categoryHue(category)} 55% 58%)` };
+}
+
+const WEEKDAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+const MONTHLY_WEEK_OPTIONS: Array<{ value: number; label: string }> = [
+  { value: 1, label: "First" },
+  { value: 2, label: "Second" },
+  { value: 3, label: "Third" },
+  { value: 4, label: "Fourth" },
+  { value: -1, label: "Last" }
+];
+
+// Human label for an item's schedule, e.g. "3rd Thursday", "Every 7 days".
+function scheduleLabel(item: LifeItem): string {
+  if (item.type === "birthday" && item.birthdayMonth && item.birthdayDay) {
+    return `Birthday ${item.birthdayMonth}/${item.birthdayDay}`;
+  }
+  if (item.monthlyWeek != null && item.monthlyWeekday != null) {
+    const ordinal = MONTHLY_WEEK_OPTIONS.find((o) => o.value === item.monthlyWeek)?.label ?? `${item.monthlyWeek}`;
+    return `${ordinal} ${WEEKDAY_NAMES[item.monthlyWeekday] ?? ""}`.trim();
+  }
+  if (item.cadenceDays) return `Every ${item.cadenceDays} days`;
+  if (item.dueDate) return formatShortDate(item.dueDate);
+  return "Manual";
 }
 
 
@@ -331,26 +355,6 @@ function AddView({ onCreate }: { onCreate: (input: CreateLifeItemInput) => void 
   return <EditDraftView draft={draft} onBack={() => setDraft(null)} onCreate={onCreate} />;
 }
 
-// Build the save payload from only the fields that apply to the chosen type,
-// sending explicit nulls for the rest. Without this, switching type would
-// silently persist stale values from hidden fields (e.g. a birthday keeping
-// the cadenceDays it had as a chore).
-function applicablePayload(draft: CreateLifeItemInput): CreateLifeItemInput {
-  const isBirthday = draft.type === "birthday";
-  const showPerson = isBirthday || draft.type === "contact";
-  return {
-    type: draft.type,
-    title: draft.title,
-    category: draft.category,
-    cadenceDays: isBirthday ? null : draft.cadenceDays ?? null,
-    dueDate: isBirthday ? null : draft.dueDate ?? null,
-    birthdayMonth: isBirthday ? draft.birthdayMonth ?? null : null,
-    birthdayDay: isBirthday ? draft.birthdayDay ?? null : null,
-    reminderLeadDays: isBirthday ? draft.reminderLeadDays ?? null : null,
-    contactName: showPerson ? draft.contactName ?? null : null
-  };
-}
-
 function EditDraftView({
   draft: initialDraft,
   onBack,
@@ -366,9 +370,24 @@ function EditDraftView({
   const [useCustomCategory, setUseCustomCategory] = useState(() =>
     initialDraft.category ? !isPresetCategory(initialDraft.category) : false
   );
+  const [repeatMode, setRepeatMode] = useState<RepeatMode>(() => initialRepeatMode(initialDraft));
 
   function update<K extends keyof CreateLifeItemInput>(key: K, value: CreateLifeItemInput[K]) {
     setDraft((current) => ({ ...current, [key]: value }));
+  }
+
+  // Switching repeat mode clears the other modes' fields so only one
+  // scheduling mechanism is ever active (and applicablePayload sends nulls
+  // for the rest).
+  function changeRepeatMode(mode: RepeatMode) {
+    setRepeatMode(mode);
+    setDraft((current) => ({
+      ...current,
+      cadenceDays: mode === "interval" ? current.cadenceDays ?? null : null,
+      dueDate: mode === "oneoff" ? current.dueDate ?? null : null,
+      monthlyWeek: mode === "monthly" ? current.monthlyWeek ?? 1 : null,
+      monthlyWeekday: mode === "monthly" ? current.monthlyWeekday ?? 1 : null
+    }));
   }
 
   // Only show the fields that apply to the selected type.
@@ -445,6 +464,17 @@ function EditDraftView({
 
         {!isBirthday && (
           <label>
+            Repeats
+            <select value={repeatMode} onChange={(event) => changeRepeatMode(event.target.value as RepeatMode)}>
+              <option value="interval">Every N days</option>
+              <option value="monthly">Monthly (day of week)</option>
+              <option value="oneoff">One-off date</option>
+            </select>
+          </label>
+        )}
+
+        {!isBirthday && repeatMode === "interval" && (
+          <label>
             Repeat every
             <div className="inline-field">
               <input
@@ -458,7 +488,35 @@ function EditDraftView({
           </label>
         )}
 
-        {!isBirthday && (
+        {!isBirthday && repeatMode === "monthly" && (
+          <label>
+            On the
+            <div className="monthly-fields">
+              <select
+                value={draft.monthlyWeek ?? 1}
+                onChange={(event) => update("monthlyWeek", Number(event.target.value))}
+              >
+                {MONTHLY_WEEK_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+              <select
+                value={draft.monthlyWeekday ?? 1}
+                onChange={(event) => update("monthlyWeekday", Number(event.target.value))}
+              >
+                {WEEKDAY_NAMES.map((name, index) => (
+                  <option key={name} value={index}>
+                    {name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </label>
+        )}
+
+        {!isBirthday && repeatMode === "oneoff" && (
           <label>
             Due date
             <input value={draft.dueDate ?? ""} type="date" onChange={(event) => update("dueDate", event.target.value || null)} />
@@ -559,20 +617,9 @@ function ItemsView({
   const visible = showArchived ? items : active;
 
   if (editingItem) {
-    const draft: CreateLifeItemInput = {
-      type: editingItem.type,
-      title: editingItem.title,
-      category: editingItem.category,
-      cadenceDays: editingItem.cadenceDays,
-      dueDate: editingItem.dueDate,
-      birthdayMonth: editingItem.birthdayMonth,
-      birthdayDay: editingItem.birthdayDay,
-      reminderLeadDays: editingItem.reminderLeadDays,
-      contactName: editingItem.contactName
-    };
     return (
       <EditDraftView
-        draft={draft}
+        draft={itemToDraft(editingItem)}
         onBack={() => setEditingItem(null)}
         onCreate={handleSaveEdit}
         saveLabel="Save changes"
@@ -604,7 +651,7 @@ function ItemsView({
             </span>
           </div>
           <span className="item-cadence">
-            {item.cadenceDays ? `Every ${item.cadenceDays} days` : item.dueDate ? formatShortDate(item.dueDate) : "Manual"}
+            {scheduleLabel(item)}
           </span>
           <div className="item-actions">
             {!item.archived && (

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildMonthGrid, isDateKey, mondayOfWeek, toDateKey } from "../shared/dates";
+import { buildMonthGrid, isDateKey, mondayOfWeek, nthWeekdayOfMonth, toDateKey } from "../shared/dates";
 import { buildToday, calculateDueDate, toNudge } from "../shared/rules";
 import type { LifeItem } from "../shared/types";
 
@@ -13,6 +13,8 @@ const baseItem: LifeItem = {
   birthdayMonth: null,
   birthdayDay: null,
   reminderLeadDays: null,
+  monthlyWeek: null,
+  monthlyWeekday: null,
   lastCompletedAt: "2026-05-10",
   contactName: null,
   archived: false,
@@ -139,6 +141,60 @@ describe("life reminder rules", () => {
       const day = new Date(lastKey + "T00:00:00").getDay();
       expect(day).toBe(0); // Sunday
     }
+  });
+
+  it("nthWeekdayOfMonth finds the 3rd Thursday and last Thursday", () => {
+    expect(nthWeekdayOfMonth(2026, 6, 3, 4)).toBe("2026-07-16"); // 3rd Thursday of July 2026
+    expect(nthWeekdayOfMonth(2026, 6, -1, 4)).toBe("2026-07-30"); // last Thursday of July 2026
+  });
+
+  it("nthWeekdayOfMonth handles a month that starts on the target weekday", () => {
+    expect(nthWeekdayOfMonth(2026, 5, 1, 1)).toBe("2026-06-01"); // 1st Monday of June 2026 (June 1 is a Monday)
+  });
+
+  it("nthWeekdayOfMonth handles the last occurrence in a 28-day month", () => {
+    expect(nthWeekdayOfMonth(2026, 1, -1, 5)).toBe("2026-02-27"); // last Friday of Feb 2026
+  });
+
+  it("schedules a monthly 'nth weekday' recurrence for the current month", () => {
+    const item: LifeItem = {
+      ...baseItem,
+      cadenceDays: null,
+      monthlyWeek: 3,
+      monthlyWeekday: 4, // Thursday
+      lastCompletedAt: null
+    };
+
+    expect(calculateDueDate(item, "2026-07-01")).toBe("2026-07-16");
+    expect(toNudge(item, "2026-07-01").urgency).toBe("later");
+  });
+
+  it("rolls a monthly recurrence to next month once completed this month", () => {
+    const item: LifeItem = {
+      ...baseItem,
+      cadenceDays: null,
+      monthlyWeek: 3,
+      monthlyWeekday: 4,
+      lastCompletedAt: "2026-07-16"
+    };
+
+    const nudge = toNudge(item, "2026-07-16");
+    expect(nudge.urgency).toBe("done");
+    expect(nudge.dueDate).toBe("2026-08-20"); // 3rd Thursday of August 2026
+  });
+
+  it("marks a missed monthly occurrence overdue until the month ends", () => {
+    const item: LifeItem = {
+      ...baseItem,
+      cadenceDays: null,
+      monthlyWeek: 3,
+      monthlyWeekday: 4,
+      lastCompletedAt: null
+    };
+
+    const nudge = toNudge(item, "2026-07-20");
+    expect(nudge.dueDate).toBe("2026-07-16");
+    expect(nudge.urgency).toBe("overdue");
   });
 
   it("groups the dashboard by urgency", () => {

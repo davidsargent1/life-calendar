@@ -1,7 +1,30 @@
 import type { LifeItem, TodayNudge, TodayResponse, Urgency } from "./types";
-import { addDays, daysBetween, nextBirthdayDate } from "./dates";
+import { addDays, daysBetween, nextBirthdayDate, nthWeekdayOfMonth } from "./dates";
 
 const SOON_WINDOW_DAYS = 7;
+
+// Next occurrence of a monthly "nth weekday" recurrence. If this month's
+// occurrence has already been completed (i.e. lastCompletedAt falls in the
+// current month), roll forward to next month's occurrence; otherwise this
+// month's occurrence stands — upcoming, due today, or overdue if it passed.
+function nextMonthlyOccurrence(
+  todayKey: string,
+  week: number,
+  weekday: number,
+  lastCompletedAt: string | null
+): string {
+  const year = Number(todayKey.slice(0, 4));
+  const month = Number(todayKey.slice(5, 7)) - 1; // 0-indexed
+  const completedThisMonth = lastCompletedAt != null && lastCompletedAt.slice(0, 7) === todayKey.slice(0, 7);
+
+  if (completedThisMonth) {
+    const nextMonth = month === 11 ? 0 : month + 1;
+    const nextYear = month === 11 ? year + 1 : year;
+    return nthWeekdayOfMonth(nextYear, nextMonth, week, weekday);
+  }
+
+  return nthWeekdayOfMonth(year, month, week, weekday);
+}
 
 export function calculateDueDate(item: LifeItem, todayKey: string): string | null {
   if (item.type === "birthday" && item.birthdayMonth && item.birthdayDay) {
@@ -18,6 +41,10 @@ export function calculateDueDate(item: LifeItem, todayKey: string): string | nul
     }
 
     return reminderDate;
+  }
+
+  if (item.monthlyWeek != null && item.monthlyWeekday != null) {
+    return nextMonthlyOccurrence(todayKey, item.monthlyWeek, item.monthlyWeekday, item.lastCompletedAt);
   }
 
   if (item.cadenceDays && item.lastCompletedAt) {
