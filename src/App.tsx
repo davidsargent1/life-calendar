@@ -37,6 +37,37 @@ function categoryDotStyle(category: string): React.CSSProperties {
   return { background: `hsl(${categoryHue(category)} 55% 58%)` };
 }
 
+type RepeatMode = "interval" | "monthly" | "oneoff";
+
+function initialRepeatMode(draft: CreateLifeItemInput): RepeatMode {
+  if (draft.monthlyWeek != null && draft.monthlyWeekday != null) return "monthly";
+  if (draft.dueDate) return "oneoff";
+  return "interval";
+}
+
+const WEEKDAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+const MONTHLY_WEEK_OPTIONS: Array<{ value: number; label: string }> = [
+  { value: 1, label: "First" },
+  { value: 2, label: "Second" },
+  { value: 3, label: "Third" },
+  { value: 4, label: "Fourth" },
+  { value: -1, label: "Last" }
+];
+
+// Human label for an item's schedule, e.g. "3rd Thursday", "Every 7 days".
+function scheduleLabel(item: LifeItem): string {
+  if (item.type === "birthday" && item.birthdayMonth && item.birthdayDay) {
+    return `Birthday ${item.birthdayMonth}/${item.birthdayDay}`;
+  }
+  if (item.monthlyWeek != null && item.monthlyWeekday != null) {
+    const ordinal = MONTHLY_WEEK_OPTIONS.find((o) => o.value === item.monthlyWeek)?.label ?? `${item.monthlyWeek}`;
+    return `${ordinal} ${WEEKDAY_NAMES[item.monthlyWeekday] ?? ""}`.trim();
+  }
+  if (item.cadenceDays) return `Every ${item.cadenceDays} days`;
+  if (item.dueDate) return formatShortDate(item.dueDate);
+  return "Manual";
+}
+
 
 export default function App() {
   const [view, setView] = useState<View>("today");
@@ -344,6 +375,8 @@ function applicablePayload(draft: CreateLifeItemInput): CreateLifeItemInput {
     category: draft.category,
     cadenceDays: isBirthday ? null : draft.cadenceDays ?? null,
     dueDate: isBirthday ? null : draft.dueDate ?? null,
+    monthlyWeek: isBirthday ? null : draft.monthlyWeek ?? null,
+    monthlyWeekday: isBirthday ? null : draft.monthlyWeekday ?? null,
     birthdayMonth: isBirthday ? draft.birthdayMonth ?? null : null,
     birthdayDay: isBirthday ? draft.birthdayDay ?? null : null,
     reminderLeadDays: isBirthday ? draft.reminderLeadDays ?? null : null,
@@ -366,9 +399,24 @@ function EditDraftView({
   const [useCustomCategory, setUseCustomCategory] = useState(() =>
     initialDraft.category ? !isPresetCategory(initialDraft.category) : false
   );
+  const [repeatMode, setRepeatMode] = useState<RepeatMode>(() => initialRepeatMode(initialDraft));
 
   function update<K extends keyof CreateLifeItemInput>(key: K, value: CreateLifeItemInput[K]) {
     setDraft((current) => ({ ...current, [key]: value }));
+  }
+
+  // Switching repeat mode clears the other modes' fields so only one
+  // scheduling mechanism is ever active (and applicablePayload sends nulls
+  // for the rest).
+  function changeRepeatMode(mode: RepeatMode) {
+    setRepeatMode(mode);
+    setDraft((current) => ({
+      ...current,
+      cadenceDays: mode === "interval" ? current.cadenceDays ?? null : null,
+      dueDate: mode === "oneoff" ? current.dueDate ?? null : null,
+      monthlyWeek: mode === "monthly" ? current.monthlyWeek ?? 1 : null,
+      monthlyWeekday: mode === "monthly" ? current.monthlyWeekday ?? 1 : null
+    }));
   }
 
   // Only show the fields that apply to the selected type.
@@ -445,6 +493,17 @@ function EditDraftView({
 
         {!isBirthday && (
           <label>
+            Repeats
+            <select value={repeatMode} onChange={(event) => changeRepeatMode(event.target.value as RepeatMode)}>
+              <option value="interval">Every N days</option>
+              <option value="monthly">Monthly (day of week)</option>
+              <option value="oneoff">One-off date</option>
+            </select>
+          </label>
+        )}
+
+        {!isBirthday && repeatMode === "interval" && (
+          <label>
             Repeat every
             <div className="inline-field">
               <input
@@ -458,7 +517,35 @@ function EditDraftView({
           </label>
         )}
 
-        {!isBirthday && (
+        {!isBirthday && repeatMode === "monthly" && (
+          <label>
+            On the
+            <div className="monthly-fields">
+              <select
+                value={draft.monthlyWeek ?? 1}
+                onChange={(event) => update("monthlyWeek", Number(event.target.value))}
+              >
+                {MONTHLY_WEEK_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+              <select
+                value={draft.monthlyWeekday ?? 1}
+                onChange={(event) => update("monthlyWeekday", Number(event.target.value))}
+              >
+                {WEEKDAY_NAMES.map((name, index) => (
+                  <option key={name} value={index}>
+                    {name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </label>
+        )}
+
+        {!isBirthday && repeatMode === "oneoff" && (
           <label>
             Due date
             <input value={draft.dueDate ?? ""} type="date" onChange={(event) => update("dueDate", event.target.value || null)} />
@@ -604,7 +691,7 @@ function ItemsView({
             </span>
           </div>
           <span className="item-cadence">
-            {item.cadenceDays ? `Every ${item.cadenceDays} days` : item.dueDate ? formatShortDate(item.dueDate) : "Manual"}
+            {scheduleLabel(item)}
           </span>
           <div className="item-actions">
             {!item.archived && (

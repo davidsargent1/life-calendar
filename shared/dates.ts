@@ -82,6 +82,21 @@ export function buildMonthGrid(year: number, month: number): string[][] {
   return grid;
 }
 
+// The date of the nth occurrence of a weekday in a month.
+// week: 1-4 for the first..fourth occurrence, or -1 for the last.
+// weekday: 0 (Sunday) .. 6 (Saturday), matching Date.getDay().
+export function nthWeekdayOfMonth(year: number, month: number, week: number, weekday: number): string {
+  if (week === -1) {
+    const lastOfMonth = new Date(year, month + 1, 0); // day 0 of next month = last day
+    const backtrack = (lastOfMonth.getDay() - weekday + 7) % 7;
+    return toDateKey(new Date(year, month, lastOfMonth.getDate() - backtrack));
+  }
+
+  const firstOfMonth = new Date(year, month, 1);
+  const offset = (weekday - firstOfMonth.getDay() + 7) % 7;
+  return toDateKey(new Date(year, month, 1 + offset + (week - 1) * 7));
+}
+
 export function mondayOfWeek(date: Date): Date {
   const d = new Date(date);
   d.setHours(0, 0, 0, 0);
