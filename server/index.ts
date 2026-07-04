@@ -139,13 +139,21 @@ Rules:
 - cadenceDays = how often to repeat in days (e.g. "every 2 weeks" = 14)
 - for "nth weekday of the month" recurrences (e.g. "every 3rd Thursday", "last Monday") set monthlyWeek (1-4, or -1 for last) and monthlyWeekday (0=Sunday..6=Saturday) instead of cadenceDays
 - category should be one of these preferred labels when one fits: ${PRESET_CATEGORIES.join(", ")}. Only invent a new short label if none of these apply
-- Do not include null values, only include fields that have meaningful values`;
+- Do not include null values, only include fields that have meaningful values
+
+Examples:
+"call mom every 2 weeks" -> {"type":"contact","title":"Call Mom","contactName":"Mom","category":"People","cadenceDays":14}
+"clean the kitchen weekly" -> {"type":"chore","title":"Clean the kitchen","category":"Chores","cadenceDays":7}
+"dad's birthday is June 3, remind me 5 days before" -> {"type":"birthday","title":"Dad's birthday","contactName":"Dad","category":"People","birthdayMonth":6,"birthdayDay":3,"reminderLeadDays":5}
+"water the plants every 3rd thursday" -> {"type":"chore","title":"Water the plants","category":"Home","monthlyWeek":3,"monthlyWeekday":4}
+"buy dog food" -> {"type":"shopping","title":"Buy dog food","category":"Shopping"}`;
 
   try {
     const msg = await openai.chat.completions.create({
       model: LLM_MODEL,
       max_tokens: 512,
       temperature: 0,
+      response_format: { type: "json_object" },
       messages: [
         { role: "system", content: systemPrompt },
         { role: "user", content: text }
