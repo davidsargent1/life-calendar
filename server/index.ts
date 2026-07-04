@@ -37,6 +37,14 @@ const parseReminderLimiter = rateLimit({
   message: { error: "Too many requests — please wait a moment and try again" }
 });
 
+// LLM provider config — point at any OpenAI-compatible endpoint:
+//   Ollama (local): LLM_BASE_URL=http://localhost:11434/v1, LLM_API_KEY=ollama, LLM_MODEL=llama3.2:3b
+//   OpenAI:         leave LLM_BASE_URL unset, LLM_API_KEY=sk-..., LLM_MODEL=gpt-4o-mini
+//   Gemini:         LLM_BASE_URL=https://generativelanguage.googleapis.com/v1beta/openai, LLM_API_KEY=<key>, LLM_MODEL=gemini-2.0-flash
+const LLM_BASE_URL = process.env.LLM_BASE_URL; // unset = OpenAI's default endpoint
+const LLM_API_KEY = process.env.LLM_API_KEY ?? process.env.OPENAI_API_KEY;
+const LLM_MODEL = process.env.LLM_MODEL ?? "gpt-4o-mini";
+
 const VALID_TYPES = new Set(["contact", "chore", "birthday", "shopping", "routine"]);
 
 const DAYS_IN_MONTH = [0, 31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
@@ -100,12 +108,12 @@ app.post("/api/parse-reminder", parseReminderLimiter, async (request, response) 
     return;
   }
 
-  if (!process.env.OPENAI_API_KEY) {
-    response.status(503).json({ error: "AI parsing is not configured — add an OPENAI_API_KEY to .env" });
+  if (!LLM_API_KEY) {
+    response.status(503).json({ error: "AI parsing is not configured — set LLM_API_KEY (and LLM_BASE_URL / LLM_MODEL) in .env" });
     return;
   }
 
-  const openai = new OpenAI();
+  const openai = new OpenAI({ apiKey: LLM_API_KEY, baseURL: LLM_BASE_URL });
 
   const systemPrompt = `You convert natural-language reminder descriptions into structured JSON for a life calendar app.
 Return ONLY valid JSON matching this TypeScript type (omit null/undefined fields):
@@ -131,12 +139,21 @@ Rules:
 - cadenceDays = how often to repeat in days (e.g. "every 2 weeks" = 14)
 - for "nth weekday of the month" recurrences (e.g. "every 3rd Thursday", "last Monday") set monthlyWeek (1-4, or -1 for last) and monthlyWeekday (0=Sunday..6=Saturday) instead of cadenceDays
 - category should be one of these preferred labels when one fits: ${PRESET_CATEGORIES.join(", ")}. Only invent a new short label if none of these apply
-- Do not include null values, only include fields that have meaningful values`;
+- Do not include null values, only include fields that have meaningful values
+
+Examples:
+"call mom every 2 weeks" -> {"type":"contact","title":"Call Mom","contactName":"Mom","category":"People","cadenceDays":14}
+"clean the kitchen weekly" -> {"type":"chore","title":"Clean the kitchen","category":"Chores","cadenceDays":7}
+"dad's birthday is June 3, remind me 5 days before" -> {"type":"birthday","title":"Dad's birthday","contactName":"Dad","category":"People","birthdayMonth":6,"birthdayDay":3,"reminderLeadDays":5}
+"water the plants every 3rd thursday" -> {"type":"chore","title":"Water the plants","category":"Home","monthlyWeek":3,"monthlyWeekday":4}
+"buy dog food" -> {"type":"shopping","title":"Buy dog food","category":"Shopping"}`;
 
   try {
     const msg = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
+      model: LLM_MODEL,
       max_tokens: 512,
+      temperature: 0,
+      response_format: { type: "json_object" },
       messages: [
         { role: "system", content: systemPrompt },
         { role: "user", content: text }
