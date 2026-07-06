@@ -49,6 +49,18 @@ export function nextBirthdayDate(
   return toUtcDateKey(new Date(Date.UTC(year + 1, month - 1, day)));
 }
 
+// The next date landing on `weekday` (0=Sun..6=Sat) relative to fromDateKey.
+// inclusive=true returns fromDateKey itself when it already is that weekday;
+// inclusive=false always moves forward to the following week's occurrence.
+export function nextWeekday(fromDateKey: string, weekday: number, inclusive: boolean): string {
+  const dow = parseDateKey(fromDateKey).getUTCDay();
+  let delta = (weekday - dow + 7) % 7;
+  if (delta === 0 && !inclusive) {
+    delta = 7;
+  }
+  return addDays(fromDateKey, delta);
+}
+
 export function formatShortDate(dateKey: string): string {
   return parseDateKey(dateKey).toLocaleDateString("en-US", {
     month: "short",

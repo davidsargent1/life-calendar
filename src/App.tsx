@@ -56,6 +56,7 @@ function scheduleLabel(item: LifeItem): string {
     const ordinal = MONTHLY_WEEK_OPTIONS.find((o) => o.value === item.monthlyWeek)?.label ?? `${item.monthlyWeek}`;
     return `${ordinal} ${WEEKDAY_NAMES[item.monthlyWeekday] ?? ""}`.trim();
   }
+  if (item.weeklyDay != null) return `Weekly on ${WEEKDAY_NAMES[item.weeklyDay] ?? ""}`.trim();
   if (item.cadenceDays) return `Every ${item.cadenceDays} days`;
   if (item.dueDate) return formatShortDate(item.dueDate);
   return "Manual";
@@ -386,7 +387,8 @@ function EditDraftView({
       cadenceDays: mode === "interval" ? current.cadenceDays ?? null : null,
       dueDate: mode === "oneoff" ? current.dueDate ?? null : null,
       monthlyWeek: mode === "monthly" ? current.monthlyWeek ?? 1 : null,
-      monthlyWeekday: mode === "monthly" ? current.monthlyWeekday ?? 1 : null
+      monthlyWeekday: mode === "monthly" ? current.monthlyWeekday ?? 1 : null,
+      weeklyDay: mode === "weekly" ? current.weeklyDay ?? 1 : null
     }));
   }
 
@@ -467,6 +469,7 @@ function EditDraftView({
             Repeats
             <select value={repeatMode} onChange={(event) => changeRepeatMode(event.target.value as RepeatMode)}>
               <option value="interval">Every N days</option>
+              <option value="weekly">Weekly (day of week)</option>
               <option value="monthly">Monthly (day of week)</option>
               <option value="oneoff">One-off date</option>
             </select>
@@ -485,6 +488,22 @@ function EditDraftView({
               />
               <span>days</span>
             </div>
+          </label>
+        )}
+
+        {!isBirthday && repeatMode === "weekly" && (
+          <label>
+            Every
+            <select
+              value={draft.weeklyDay ?? 1}
+              onChange={(event) => update("weeklyDay", Number(event.target.value))}
+            >
+              {WEEKDAY_NAMES.map((name, index) => (
+                <option key={name} value={index}>
+                  {name}
+                </option>
+              ))}
+            </select>
           </label>
         )}
 

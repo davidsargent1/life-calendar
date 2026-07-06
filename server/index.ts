@@ -68,6 +68,10 @@ function isValidMonthly(week: unknown, weekday: unknown): boolean {
   );
 }
 
+function isValidWeekday(value: unknown): boolean {
+  return typeof value === "number" && Number.isInteger(value) && value >= 0 && value <= 6;
+}
+
 function validateParsedReminder(raw: unknown): CreateLifeItemInput {
   if (!raw || typeof raw !== "object") throw new Error("AI returned unexpected format");
   const obj = raw as Record<string, unknown>;
@@ -90,6 +94,7 @@ function validateParsedReminder(raw: unknown): CreateLifeItemInput {
     result.monthlyWeek = obj.monthlyWeek as number;
     result.monthlyWeekday = obj.monthlyWeekday as number;
   }
+  if (isValidWeekday(obj.weeklyDay)) result.weeklyDay = obj.weeklyDay as number;
   if (typeof obj.contactName === "string") result.contactName = obj.contactName;
 
   return result;
@@ -128,6 +133,7 @@ Return ONLY valid JSON matching this TypeScript type (omit null/undefined fields
   reminderLeadDays?: number,
   monthlyWeek?: number,    // 1-4 or -1 (last)
   monthlyWeekday?: number, // 0 (Sun) - 6 (Sat)
+  weeklyDay?: number,      // 0 (Sun) - 6 (Sat)
   contactName?: string
 }
 Rules:
@@ -138,6 +144,7 @@ Rules:
 - "routine" type = personal habits
 - cadenceDays = how often to repeat in days (e.g. "every 2 weeks" = 14)
 - for "nth weekday of the month" recurrences (e.g. "every 3rd Thursday", "last Monday") set monthlyWeek (1-4, or -1 for last) and monthlyWeekday (0=Sunday..6=Saturday) instead of cadenceDays
+- for weekly recurrences on a specific day (e.g. "every Monday", "weekly on Friday") set weeklyDay (0=Sunday..6=Saturday) instead of cadenceDays
 - category should be one of these preferred labels when one fits: ${PRESET_CATEGORIES.join(", ")}. Only invent a new short label if none of these apply
 - Do not include null values, only include fields that have meaningful values
 
@@ -146,6 +153,7 @@ Examples:
 "clean the kitchen weekly" -> {"type":"chore","title":"Clean the kitchen","category":"Chores","cadenceDays":7}
 "dad's birthday is June 3, remind me 5 days before" -> {"type":"birthday","title":"Dad's birthday","contactName":"Dad","category":"People","birthdayMonth":6,"birthdayDay":3,"reminderLeadDays":5}
 "water the plants every 3rd thursday" -> {"type":"chore","title":"Water the plants","category":"Home","monthlyWeek":3,"monthlyWeekday":4}
+"take out recycling every monday" -> {"type":"chore","title":"Take out recycling","category":"Chores","weeklyDay":1}
 "buy dog food" -> {"type":"shopping","title":"Buy dog food","category":"Shopping"}`;
 
   try {
@@ -249,6 +257,11 @@ app.post("/api/items", (request, response) => {
     }
   }
 
+  if (input.weeklyDay !== undefined && input.weeklyDay !== null && !isValidWeekday(input.weeklyDay)) {
+    response.status(400).json({ error: "weeklyDay must be 0 (Sunday) - 6 (Saturday)" });
+    return;
+  }
+
   response.status(201).json(createItem(input));
 });
 
@@ -297,6 +310,11 @@ app.patch("/api/items/:id", (request, response) => {
       response.status(400).json({ error: "monthlyWeek must be 1-4 or -1 (last) and monthlyWeekday must be 0-6, both together" });
       return;
     }
+  }
+
+  if (input.weeklyDay !== undefined && input.weeklyDay !== null && !isValidWeekday(input.weeklyDay)) {
+    response.status(400).json({ error: "weeklyDay must be 0 (Sunday) - 6 (Saturday)" });
+    return;
   }
 
   const item = updateItem(request.params.id, input);

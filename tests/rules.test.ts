@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildMonthGrid, isDateKey, mondayOfWeek, nthWeekdayOfMonth, toDateKey } from "../shared/dates";
+import { buildMonthGrid, isDateKey, mondayOfWeek, nextWeekday, nthWeekdayOfMonth, toDateKey } from "../shared/dates";
 import { buildToday, calculateDueDate, toNudge } from "../shared/rules";
 import type { LifeItem } from "../shared/types";
 
@@ -15,6 +15,7 @@ const baseItem: LifeItem = {
   reminderLeadDays: null,
   monthlyWeek: null,
   monthlyWeekday: null,
+  weeklyDay: null,
   lastCompletedAt: "2026-05-10",
   contactName: null,
   archived: false,
@@ -194,6 +195,55 @@ describe("life reminder rules", () => {
 
     const nudge = toNudge(item, "2026-07-20");
     expect(nudge.dueDate).toBe("2026-07-16");
+    expect(nudge.urgency).toBe("overdue");
+  });
+
+  it("nextWeekday finds the next matching weekday", () => {
+    // 2026-07-01 is a Wednesday
+    expect(nextWeekday("2026-07-01", 1, true)).toBe("2026-07-06"); // next Monday on/after
+    expect(nextWeekday("2026-07-01", 3, true)).toBe("2026-07-01"); // Wednesday, inclusive → same day
+    expect(nextWeekday("2026-07-06", 1, false)).toBe("2026-07-13"); // Monday, exclusive → next week
+    expect(nextWeekday("2026-07-06", 1, true)).toBe("2026-07-06"); // Monday, inclusive → same day
+  });
+
+  it("schedules a weekly recurrence anchored to creation", () => {
+    const item: LifeItem = {
+      ...baseItem,
+      cadenceDays: null,
+      weeklyDay: 1, // Monday
+      lastCompletedAt: null,
+      createdAt: "2026-07-01T12:00:00.000Z" // Wednesday
+    };
+
+    expect(calculateDueDate(item, "2026-07-01")).toBe("2026-07-06"); // first Monday after creation
+    expect(toNudge(item, "2026-07-01").urgency).toBe("soon");
+  });
+
+  it("advances a weekly recurrence to next week once completed", () => {
+    const item: LifeItem = {
+      ...baseItem,
+      cadenceDays: null,
+      weeklyDay: 1,
+      lastCompletedAt: "2026-07-06", // completed on the Monday
+      createdAt: "2026-07-01T12:00:00.000Z"
+    };
+
+    const nudge = toNudge(item, "2026-07-06");
+    expect(nudge.urgency).toBe("done");
+    expect(nudge.dueDate).toBe("2026-07-13"); // next Monday
+  });
+
+  it("marks a missed weekly occurrence overdue until completed", () => {
+    const item: LifeItem = {
+      ...baseItem,
+      cadenceDays: null,
+      weeklyDay: 1,
+      lastCompletedAt: null,
+      createdAt: "2026-07-01T12:00:00.000Z"
+    };
+
+    const nudge = toNudge(item, "2026-07-08"); // Wednesday after the Monday
+    expect(nudge.dueDate).toBe("2026-07-06");
     expect(nudge.urgency).toBe("overdue");
   });
 
