@@ -497,6 +497,32 @@ h3 {
   margin: 0;
 }
 
+/* Clickable day cells — tap/click to add a weekly reminder on that weekday. */
+.cal-clickable {
+  cursor: pointer;
+  position: relative;
+}
+
+.cal-clickable:hover {
+  background: #f0f6f2;
+}
+
+.cal-add-hint {
+  color: #1f7a5a;
+  font-weight: 900;
+  line-height: 1;
+  opacity: 0;
+  pointer-events: none;
+  position: absolute;
+  right: 6px;
+  top: 5px;
+  transition: opacity 0.12s ease;
+}
+
+.cal-clickable:hover .cal-add-hint {
+  opacity: 0.85;
+}
+
 .cal-pill {
   /* Background/colour set inline per category (see categoryPillStyle) */
   border-radius: 6px;

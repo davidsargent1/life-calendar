@@ -1,6 +1,18 @@
+import { parseDateKey } from "../shared/dates";
 import type { CreateLifeItemInput, LifeItem } from "../shared/types";
 
 export type RepeatMode = "interval" | "weekly" | "monthly" | "oneoff";
+
+// A blank draft seeded to recur weekly on the weekday of the given date —
+// used when a day is clicked in the calendar views.
+export function draftForDay(dayKey: string): CreateLifeItemInput {
+  return {
+    type: "routine",
+    title: "",
+    category: "",
+    weeklyDay: parseDateKey(dayKey).getUTCDay()
+  };
+}
 
 // Copy an existing item into an editable draft. Kept as one function so a
 // newly added field can't be silently dropped by one of several call sites.

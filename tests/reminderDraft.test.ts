@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applicablePayload, initialRepeatMode, itemToDraft } from "../src/reminderDraft";
+import { applicablePayload, draftForDay, initialRepeatMode, itemToDraft } from "../src/reminderDraft";
 import type { LifeItem } from "../shared/types";
 
 const monthlyItem: LifeItem = {
@@ -47,6 +47,13 @@ describe("reminder draft round-trip", () => {
     const draft = itemToDraft({ ...monthlyItem, monthlyWeek: null, monthlyWeekday: null, weeklyDay: 1 });
     expect(draft.weeklyDay).toBe(1);
     expect(applicablePayload({ ...draft, title: "edited" }).weeklyDay).toBe(1);
+  });
+
+  it("draftForDay seeds a weekly reminder on the clicked day's weekday", () => {
+    const draft = draftForDay("2026-07-06"); // a Monday
+    expect(draft.weeklyDay).toBe(1);
+    expect(initialRepeatMode(draft)).toBe("weekly");
+    expect(draftForDay("2026-07-10").weeklyDay).toBe(5); // a Friday
   });
 
   it("drops the monthly schedule when the type becomes birthday", () => {
