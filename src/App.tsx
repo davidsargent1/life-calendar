@@ -728,6 +728,13 @@ function weekdayName(dayKey: string): string {
   return WEEKDAY_NAMES[parseDateKey(dayKey).getUTCDay()] ?? "";
 }
 
+function activateOnKey(event: React.KeyboardEvent, action: () => void) {
+  if (event.key === "Enter" || event.key === " ") {
+    event.preventDefault();
+    action();
+  }
+}
+
 // Interactive legend + filter: lists every category the user has (so hidden
 // ones stay reachable) and toggles them in/out of the calendar on click.
 function CategoryFilter({
@@ -848,7 +855,11 @@ function WeekView({ items, hiddenCategories, onToggleCategory, onShowAll, onDayC
             <div
               key={dayKey}
               className={`week-col cal-clickable${isToday ? " week-col--today" : ""}`}
+              role="button"
+              tabIndex={0}
+              aria-label={`Add a weekly reminder on ${weekdayName(dayKey)}`}
               onClick={() => onDayClick(dayKey)}
+              onKeyDown={(event) => activateOnKey(event, () => onDayClick(dayKey))}
               title={`Add a weekly reminder on ${weekdayName(dayKey)}`}
             >
               <span className="cal-add-hint" aria-hidden="true">＋</span>
@@ -862,7 +873,7 @@ function WeekView({ items, hiddenCategories, onToggleCategory, onShowAll, onDayC
                 {dayItems.length === 0
                   ? <p className="cal-empty">—</p>
                   : dayItems.map(item => (
-                    <div key={item.id} className="cal-pill" style={categoryPillStyle(item.category)}>{item.title}</div>
+                    <div key={item.id} className="cal-pill" style={categoryPillStyle(item.category)} onClick={(event) => event.stopPropagation()}>{item.title}</div>
                   ))
                 }
               </div>
@@ -964,14 +975,18 @@ function MonthView({ items, hiddenCategories, onToggleCategory, onShowAll, onDay
                 inMonth ? "" : "month-cell--out",
                 isToday ? "month-cell--today" : ""
               ].filter(Boolean).join(" ")}
+              role="button"
+              tabIndex={0}
+              aria-label={`Add a weekly reminder on ${weekdayName(dayKey)}`}
               onClick={() => onDayClick(dayKey)}
+              onKeyDown={(event) => activateOnKey(event, () => onDayClick(dayKey))}
               title={`Add a weekly reminder on ${weekdayName(dayKey)}`}
             >
               <span className="cal-add-hint" aria-hidden="true">＋</span>
               <span className={`month-cell-num${isToday ? " month-cell-num--today" : ""}`}>{dayNum}</span>
               <div className="month-cell-items">
                 {dayItems.map(item => (
-                  <div key={item.id} className="cal-pill" style={categoryPillStyle(item.category)}>{item.title}</div>
+                  <div key={item.id} className="cal-pill" style={categoryPillStyle(item.category)} onClick={(event) => event.stopPropagation()}>{item.title}</div>
                 ))}
               </div>
             </div>

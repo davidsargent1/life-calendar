@@ -507,6 +507,12 @@ h3 {
   background: #f0f6f2;
 }
 
+/* Keep today's cell visually distinct even while hovered. */
+.week-col--today.cal-clickable:hover,
+.month-cell--today.cal-clickable:hover {
+  background: #e4f0e9;
+}
+
 .cal-add-hint {
   color: #1f7a5a;
   font-weight: 900;
