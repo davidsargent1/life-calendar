@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { applicablePayload, draftForDay, initialRepeatMode, itemToDraft } from "../src/reminderDraft";
+import { BIRTHDAY_CATEGORY } from "../shared/categories";
 import type { LifeItem } from "../shared/types";
 
 const monthlyItem: LifeItem = {
   id: "item-1",
-  type: "chore",
   title: "Deep clean",
   category: "Home",
   cadenceDays: null,
@@ -56,8 +56,8 @@ describe("reminder draft round-trip", () => {
     expect(draftForDay("2026-07-10").weeklyDay).toBe(5); // a Friday
   });
 
-  it("drops the monthly schedule when the type becomes birthday", () => {
-    const payload = applicablePayload(itemToDraft({ ...monthlyItem, type: "birthday" }));
+  it("drops the monthly schedule when the category becomes Birthdays", () => {
+    const payload = applicablePayload(itemToDraft({ ...monthlyItem, category: BIRTHDAY_CATEGORY }));
     expect(payload.monthlyWeek).toBeNull();
     expect(payload.monthlyWeekday).toBeNull();
   });

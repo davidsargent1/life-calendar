@@ -45,8 +45,6 @@ const LLM_BASE_URL = process.env.LLM_BASE_URL; // unset = OpenAI's default endpo
 const LLM_API_KEY = process.env.LLM_API_KEY ?? process.env.OPENAI_API_KEY;
 const LLM_MODEL = process.env.LLM_MODEL ?? "gpt-4o-mini";
 
-const VALID_TYPES = new Set(["contact", "chore", "birthday", "shopping", "routine"]);
-
 const DAYS_IN_MONTH = [0, 31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
 
 function isValidBirthdayDay(month: number, day: number): boolean {
@@ -77,10 +75,8 @@ function validateParsedReminder(raw: unknown): CreateLifeItemInput {
   const obj = raw as Record<string, unknown>;
 
   if (typeof obj.title !== "string" || !obj.title.trim()) throw new Error("AI response missing title");
-  if (!VALID_TYPES.has(obj.type as string)) throw new Error("AI response has invalid type");
 
   const result: CreateLifeItemInput = {
-    type: obj.type as CreateLifeItemInput["type"],
     title: String(obj.title).trim()
   };
 
@@ -123,7 +119,6 @@ app.post("/api/parse-reminder", parseReminderLimiter, async (request, response) 
   const systemPrompt = `You convert natural-language reminder descriptions into structured JSON for a life calendar app.
 Return ONLY valid JSON matching this TypeScript type (omit null/undefined fields):
 {
-  type: "contact" | "chore" | "birthday" | "shopping" | "routine",
   title: string,
   category?: string,
   cadenceDays?: number,
@@ -137,24 +132,21 @@ Return ONLY valid JSON matching this TypeScript type (omit null/undefined fields
   contactName?: string
 }
 Rules:
-- "contact" type = calling/texting/visiting a person; set contactName
-- "birthday" type = birthday reminders; set birthdayMonth/birthdayDay/reminderLeadDays
-- "chore" type = household tasks
-- "shopping" type = buying things
-- "routine" type = personal habits
+- category should be one of these preferred labels when one fits: ${PRESET_CATEGORIES.join(", ")}. Only invent a new short label if none of these apply
+- for birthday reminders use category "Birthdays" and set birthdayMonth/birthdayDay/reminderLeadDays
+- for calling/texting/visiting a person use category "People" and set contactName
 - cadenceDays = how often to repeat in days (e.g. "every 2 weeks" = 14)
 - for "nth weekday of the month" recurrences (e.g. "every 3rd Thursday", "last Monday") set monthlyWeek (1-4, or -1 for last) and monthlyWeekday (0=Sunday..6=Saturday) instead of cadenceDays
 - for weekly recurrences on a specific day (e.g. "every Monday", "weekly on Friday") set weeklyDay (0=Sunday..6=Saturday) instead of cadenceDays
-- category should be one of these preferred labels when one fits: ${PRESET_CATEGORIES.join(", ")}. Only invent a new short label if none of these apply
 - Do not include null values, only include fields that have meaningful values
 
 Examples:
-"call mom every 2 weeks" -> {"type":"contact","title":"Call Mom","contactName":"Mom","category":"People","cadenceDays":14}
-"clean the kitchen weekly" -> {"type":"chore","title":"Clean the kitchen","category":"Chores","cadenceDays":7}
-"dad's birthday is June 3, remind me 5 days before" -> {"type":"birthday","title":"Dad's birthday","contactName":"Dad","category":"People","birthdayMonth":6,"birthdayDay":3,"reminderLeadDays":5}
-"water the plants every 3rd thursday" -> {"type":"chore","title":"Water the plants","category":"Home","monthlyWeek":3,"monthlyWeekday":4}
-"take out recycling every monday" -> {"type":"chore","title":"Take out recycling","category":"Chores","weeklyDay":1}
-"buy dog food" -> {"type":"shopping","title":"Buy dog food","category":"Shopping"}`;
+"call mom every 2 weeks" -> {"title":"Call Mom","category":"People","contactName":"Mom","cadenceDays":14}
+"clean the kitchen weekly" -> {"title":"Clean the kitchen","category":"Chores","cadenceDays":7}
+"dad's birthday is June 3, remind me 5 days before" -> {"title":"Dad's birthday","category":"Birthdays","contactName":"Dad","birthdayMonth":6,"birthdayDay":3,"reminderLeadDays":5}
+"water the plants every 3rd thursday" -> {"title":"Water the plants","category":"Home","monthlyWeek":3,"monthlyWeekday":4}
+"take out recycling every monday" -> {"title":"Take out recycling","category":"Chores","weeklyDay":1}
+"buy dog food" -> {"title":"Buy dog food","category":"Shopping"}`;
 
   try {
     const msg = await openai.chat.completions.create({
@@ -220,8 +212,8 @@ app.post("/api/items/:id/unarchive", (request, response) => {
 app.post("/api/items", (request, response) => {
   const input = request.body as CreateLifeItemInput;
 
-  if (!input.title?.trim() || !input.type) {
-    response.status(400).json({ error: "title and type are required" });
+  if (!input.title?.trim()) {
+    response.status(400).json({ error: "title is required" });
     return;
   }
 

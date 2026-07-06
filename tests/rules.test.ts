@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { buildMonthGrid, isDateKey, mondayOfWeek, nextWeekday, nthWeekdayOfMonth, toDateKey } from "../shared/dates";
 import { buildToday, calculateDueDate, toNudge } from "../shared/rules";
+import { BIRTHDAY_CATEGORY } from "../shared/categories";
 import type { LifeItem } from "../shared/types";
 
 const baseItem: LifeItem = {
   id: "item-1",
-  type: "chore",
   title: "Clean bathroom",
   category: "Home",
   cadenceDays: 7,
@@ -42,7 +42,7 @@ describe("life reminder rules", () => {
   it("uses birthday lead time as the due date", () => {
     const item: LifeItem = {
       ...baseItem,
-      type: "birthday",
+      category: BIRTHDAY_CATEGORY,
       title: "Buy Maya's birthday present",
       cadenceDays: null,
       birthdayMonth: 5,
@@ -58,7 +58,7 @@ describe("life reminder rules", () => {
   it("does not resurface a birthday reminder after it is completed for the current cycle", () => {
     const item: LifeItem = {
       ...baseItem,
-      type: "birthday",
+      category: BIRTHDAY_CATEGORY,
       title: "Buy Maya's birthday present",
       cadenceDays: null,
       birthdayMonth: 5,

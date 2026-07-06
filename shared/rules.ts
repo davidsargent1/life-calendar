@@ -1,5 +1,6 @@
 import type { LifeItem, TodayNudge, TodayResponse, Urgency } from "./types";
 import { addDays, daysBetween, nextBirthdayDate, nextWeekday, nthWeekdayOfMonth } from "./dates";
+import { isBirthdayCategory, isPeopleCategory } from "./categories";
 
 const SOON_WINDOW_DAYS = 7;
 
@@ -27,7 +28,7 @@ function nextMonthlyOccurrence(
 }
 
 export function calculateDueDate(item: LifeItem, todayKey: string): string | null {
-  if (item.type === "birthday" && item.birthdayMonth && item.birthdayDay) {
+  if (isBirthdayCategory(item.category) && item.birthdayMonth && item.birthdayDay) {
     const birthday = nextBirthdayDate(todayKey, item.birthdayMonth, item.birthdayDay);
     const reminderDate = addDays(birthday, -(item.reminderLeadDays ?? 7));
 
@@ -111,7 +112,7 @@ export function buildMessage(
     return `${item.title} done.`;
   }
 
-  if (item.type === "contact" && item.contactName && daysUntilDue !== null && daysUntilDue < 0) {
+  if (isPeopleCategory(item.category) && item.contactName && daysUntilDue !== null && daysUntilDue < 0) {
     return `Call ${item.contactName}.`;
   }
 

@@ -1,22 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
 import { archiveItem, completeItem, createItem, fetchItems, fetchToday, parseReminder, unarchiveItem, updateItem } from "./api";
 import { buildMonthGrid, formatShortDate, mondayOfWeek, parseDateKey, toDateKey } from "../shared/dates";
-import { PRESET_CATEGORIES, isPresetCategory } from "../shared/categories";
+import { DEFAULT_CATEGORY, PRESET_CATEGORIES, isBirthdayCategory, isPeopleCategory, isPresetCategory } from "../shared/categories";
 import { calculateDueDate } from "../shared/rules";
 import { applicablePayload, draftForDay, initialRepeatMode, itemToDraft, type RepeatMode } from "./reminderDraft";
-import type { CreateLifeItemInput, LifeItem, LifeItemType, TodayNudge, TodayResponse } from "../shared/types";
+import type { CreateLifeItemInput, LifeItem, TodayNudge, TodayResponse } from "../shared/types";
 
 const CUSTOM_CATEGORY = "__custom__";
 
 type View = "today" | "week" | "month" | "add" | "items";
-
-const typeLabels: Record<LifeItemType, string> = {
-  birthday: "Birthday",
-  chore: "Chore",
-  contact: "Contact",
-  routine: "Routine",
-  shopping: "Shopping"
-};
 
 // Map an arbitrary category string to a stable hue (0-359) so each
 // category gets a consistent colour without a hard-coded palette.
@@ -49,7 +41,7 @@ const MONTHLY_WEEK_OPTIONS: Array<{ value: number; label: string }> = [
 
 // Human label for an item's schedule, e.g. "3rd Thursday", "Every 7 days".
 function scheduleLabel(item: LifeItem): string {
-  if (item.type === "birthday" && item.birthdayMonth && item.birthdayDay) {
+  if (isBirthdayCategory(item.category) && item.birthdayMonth && item.birthdayDay) {
     return `Birthday ${item.birthdayMonth}/${item.birthdayDay}`;
   }
   if (item.monthlyWeek != null && item.monthlyWeekday != null) {
@@ -315,7 +307,7 @@ function NudgeSection({
   );
 }
 
-const emptyDraft: CreateLifeItemInput = { type: "routine", title: "", category: "" };
+const emptyDraft: CreateLifeItemInput = { title: "", category: DEFAULT_CATEGORY };
 
 function AddView({
   onCreate,
@@ -418,9 +410,9 @@ function EditDraftView({
     }));
   }
 
-  // Only show the fields that apply to the selected type.
-  const isBirthday = draft.type === "birthday";
-  const showPerson = isBirthday || draft.type === "contact";
+  // Only show the fields that apply to the chosen category.
+  const isBirthday = isBirthdayCategory(draft.category);
+  const showPerson = isBirthday || isPeopleCategory(draft.category);
 
   return (
     <div className="add-layout">
@@ -436,17 +428,6 @@ function EditDraftView({
             ← Back
           </button>
         </div>
-
-        <label>
-          Type
-          <select value={draft.type} onChange={(event) => update("type", event.target.value as LifeItemType)}>
-            {Object.entries(typeLabels).map(([value, label]) => (
-              <option key={value} value={value}>
-                {label}
-              </option>
-            ))}
-          </select>
-        </label>
 
         <label>
           Reminder
@@ -468,7 +449,6 @@ function EditDraftView({
               }
             }}
           >
-            <option value="">Default for type</option>
             {PRESET_CATEGORIES.map((category) => (
               <option key={category} value={category}>
                 {category}
@@ -690,7 +670,6 @@ function ItemsView({
           <div>
             <p>{item.title}</p>
             <span>
-              {typeLabels[item.type]} •{" "}
               <span className="cat-dot" style={categoryDotStyle(item.category)} />
               {item.category}
             </span>

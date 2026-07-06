@@ -2,7 +2,7 @@ import Database from "better-sqlite3";
 import { mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { toDateKey } from "../shared/dates";
-import { normalizeCategory } from "../shared/categories";
+import { BIRTHDAY_CATEGORY, DEFAULT_CATEGORY, PEOPLE_CATEGORY, normalizeCategory } from "../shared/categories";
 import type { CreateLifeItemInput, LifeItem, UpdateLifeItemInput } from "../shared/types";
 
 const dbPath = join(process.cwd(), "data", "life-calendar.sqlite");
@@ -16,7 +16,6 @@ export function migrate(): void {
   db.exec(`
     CREATE TABLE IF NOT EXISTS items (
       id TEXT PRIMARY KEY,
-      type TEXT NOT NULL,
       title TEXT NOT NULL,
       category TEXT NOT NULL,
       cadence_days INTEGER,
@@ -52,6 +51,15 @@ export function migrate(): void {
   if (!cols.includes("weekly_day")) {
     db.exec("ALTER TABLE items ADD COLUMN weekly_day INTEGER");
   }
+
+  // "type" was merged into "category": birthday/contact items adopt the
+  // special categories that now carry their behaviour, then the column is
+  // dropped. Runs once against pre-merge databases.
+  if (cols.includes("type")) {
+    db.prepare("UPDATE items SET category = ? WHERE type = 'birthday'").run(BIRTHDAY_CATEGORY);
+    db.prepare("UPDATE items SET category = ? WHERE type = 'contact'").run(PEOPLE_CATEGORY);
+    db.exec("ALTER TABLE items DROP COLUMN type");
+  }
 }
 
 export function seedIfEmpty(): void {
@@ -65,11 +73,11 @@ export function seedIfEmpty(): void {
   const now = new Date().toISOString();
   const insert = db.prepare(`
     INSERT INTO items (
-      id, type, title, category, cadence_days, due_date, birthday_month,
+      id, title, category, cadence_days, due_date, birthday_month,
       birthday_day, reminder_lead_days, monthly_week, monthly_weekday, weekly_day,
       last_completed_at, contact_name, archived, created_at, updated_at
     ) VALUES (
-      @id, @type, @title, @category, @cadenceDays, @dueDate, @birthdayMonth,
+      @id, @title, @category, @cadenceDays, @dueDate, @birthdayMonth,
       @birthdayDay, @reminderLeadDays, @monthlyWeek, @monthlyWeekday, @weeklyDay,
       @lastCompletedAt, @contactName, @archived, @createdAt, @updatedAt
     )
@@ -78,9 +86,8 @@ export function seedIfEmpty(): void {
   const seedItems: LifeItem[] = [
     {
       id: crypto.randomUUID(),
-      type: "contact",
       title: "Call Grandma",
-      category: "People",
+      category: PEOPLE_CATEGORY,
       cadenceDays: 30,
       dueDate: null,
       birthdayMonth: null,
@@ -97,7 +104,6 @@ export function seedIfEmpty(): void {
     },
     {
       id: crypto.randomUUID(),
-      type: "shopping",
       title: "Go grocery shopping",
       category: "Shopping",
       cadenceDays: 7,
@@ -116,7 +122,6 @@ export function seedIfEmpty(): void {
     },
     {
       id: crypto.randomUUID(),
-      type: "chore",
       title: "Clean bathroom",
       category: "Home",
       cadenceDays: 7,
@@ -135,9 +140,8 @@ export function seedIfEmpty(): void {
     },
     {
       id: crypto.randomUUID(),
-      type: "birthday",
       title: "Buy Maya's birthday present",
-      category: "Events",
+      category: BIRTHDAY_CATEGORY,
       cadenceDays: null,
       dueDate: null,
       birthdayMonth: birthdayParts(offsetDate(today, 7)).month,
@@ -193,9 +197,8 @@ export function createItem(input: CreateLifeItemInput): LifeItem {
   const now = new Date().toISOString();
   const item: LifeItem = {
     id: crypto.randomUUID(),
-    type: input.type,
     title: input.title.trim(),
-    category: normalizeCategory(input.category ?? "") || defaultCategory(input.type),
+    category: normalizeCategory(input.category ?? "") || DEFAULT_CATEGORY,
     cadenceDays: input.cadenceDays ?? null,
     dueDate: input.dueDate ?? null,
     birthdayMonth: input.birthdayMonth ?? null,
@@ -213,11 +216,11 @@ export function createItem(input: CreateLifeItemInput): LifeItem {
 
   db.prepare(`
     INSERT INTO items (
-      id, type, title, category, cadence_days, due_date, birthday_month,
+      id, title, category, cadence_days, due_date, birthday_month,
       birthday_day, reminder_lead_days, monthly_week, monthly_weekday, weekly_day,
       last_completed_at, contact_name, archived, created_at, updated_at
     ) VALUES (
-      @id, @type, @title, @category, @cadenceDays, @dueDate, @birthdayMonth,
+      @id, @title, @category, @cadenceDays, @dueDate, @birthdayMonth,
       @birthdayDay, @reminderLeadDays, @monthlyWeek, @monthlyWeekday, @weeklyDay,
       @lastCompletedAt, @contactName, @archived, @createdAt, @updatedAt
     )
@@ -239,7 +242,7 @@ export function updateItem(id: string, input: UpdateLifeItemInput): LifeItem | n
     title: input.title?.trim() ?? existing.title,
     category: normalizeCategory(input.category ?? "") || existing.category,
     // Distinguish "omitted" (keep existing) from an explicit null/empty (clear),
-    // so switching an item's type can drop a now-irrelevant Person.
+    // so changing an item's category can drop a now-irrelevant Person.
     contactName: input.contactName === undefined ? existing.contactName : (input.contactName?.trim() || null),
     updatedAt: new Date().toISOString()
   };
@@ -247,7 +250,6 @@ export function updateItem(id: string, input: UpdateLifeItemInput): LifeItem | n
   db.prepare(`
     UPDATE items
     SET
-      type = @type,
       title = @title,
       category = @category,
       cadence_days = @cadenceDays,
@@ -303,7 +305,6 @@ function fromRow(row: unknown): LifeItem {
 
   return {
     id: String(item.id),
-    type: item.type as LifeItem["type"],
     title: String(item.title),
     category: String(item.category),
     cadenceDays: item.cadence_days as number | null,
@@ -325,7 +326,6 @@ function fromRow(row: unknown): LifeItem {
 function toDbParams(item: LifeItem): Record<string, string | number | null> {
   return {
     id: item.id,
-    type: item.type,
     title: item.title,
     category: item.category,
     cadenceDays: item.cadenceDays,
@@ -342,18 +342,6 @@ function toDbParams(item: LifeItem): Record<string, string | number | null> {
     createdAt: item.createdAt,
     updatedAt: item.updatedAt
   };
-}
-
-function defaultCategory(type: LifeItem["type"]): string {
-  const categories: Record<LifeItem["type"], string> = {
-    birthday: "Events",
-    chore: "Chores",
-    contact: "People",
-    routine: "Home",
-    shopping: "Shopping"
-  };
-
-  return categories[type];
 }
 
 function offsetDate(dateKey: string, days: number): string {
