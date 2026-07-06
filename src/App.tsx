@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { archiveItem, completeItem, createItem, fetchItems, fetchToday, parseReminder, unarchiveItem, updateItem } from "./api";
-import { buildMonthGrid, formatShortDate, mondayOfWeek, toDateKey } from "../shared/dates";
+import { buildMonthGrid, formatShortDate, mondayOfWeek, parseDateKey, toDateKey } from "../shared/dates";
 import { PRESET_CATEGORIES, isPresetCategory } from "../shared/categories";
 import { calculateDueDate } from "../shared/rules";
-import { applicablePayload, initialRepeatMode, itemToDraft, type RepeatMode } from "./reminderDraft";
+import { applicablePayload, draftForDay, initialRepeatMode, itemToDraft, type RepeatMode } from "./reminderDraft";
 import type { CreateLifeItemInput, LifeItem, LifeItemType, TodayNudge, TodayResponse } from "../shared/types";
 
 const CUSTOM_CATEGORY = "__custom__";
@@ -69,10 +69,24 @@ export default function App() {
   const [items, setItems] = useState<LifeItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // A draft to seed the Add view with (e.g. when a calendar day is clicked).
+  const [addDraft, setAddDraft] = useState<CreateLifeItemInput | null>(null);
   // Categories hidden from the calendar views. Shared across Week and Month
   // so the filter persists when switching between them. Opt-out: empty = all
   // shown, so newly added categories appear by default.
   const [hiddenCategories, setHiddenCategories] = useState<Set<string>>(() => new Set());
+
+  // Navigate via the tabs/buttons; clears any seeded Add draft so a plain
+  // "Add" starts blank. The day-click path sets a draft and switches directly.
+  function goToView(next: View) {
+    setAddDraft(null);
+    setView(next);
+  }
+
+  function handleAddOnDay(dayKey: string) {
+    setAddDraft(draftForDay(dayKey));
+    setView("add");
+  }
 
   function toggleCategory(category: string) {
     setHiddenCategories((prev) => {
@@ -120,6 +134,7 @@ export default function App() {
     try {
       await createItem(input);
       await load();
+      setAddDraft(null);
       setView("today");
     } catch (createError: unknown) {
       setError(createError instanceof Error ? createError.message : "Failed to save reminder");
@@ -128,7 +143,7 @@ export default function App() {
 
   return (
     <main className="app-shell">
-      <Header activeView={view} onNavigate={setView} />
+      <Header activeView={view} onNavigate={goToView} />
 
       {error && (
         <section className="notice" role="alert">
@@ -139,7 +154,7 @@ export default function App() {
       {loading && <section className="notice">Loading household board...</section>}
 
       {!loading && view === "today" && today && (
-        <TodayView today={today} onComplete={handleComplete} onAdd={() => setView("add")} />
+        <TodayView today={today} onComplete={handleComplete} onAdd={() => goToView("add")} />
       )}
 
       {!loading && view === "week" && (
@@ -148,6 +163,7 @@ export default function App() {
           hiddenCategories={hiddenCategories}
           onToggleCategory={toggleCategory}
           onShowAll={showAllCategories}
+          onDayClick={handleAddOnDay}
         />
       )}
 
@@ -157,10 +173,13 @@ export default function App() {
           hiddenCategories={hiddenCategories}
           onToggleCategory={toggleCategory}
           onShowAll={showAllCategories}
+          onDayClick={handleAddOnDay}
         />
       )}
 
-      {!loading && view === "add" && <AddView onCreate={handleCreate} />}
+      {!loading && view === "add" && (
+        <AddView key={addDraft ? "seeded" : "blank"} onCreate={handleCreate} initialDraft={addDraft} />
+      )}
 
       {!loading && view === "items" && (
         <ItemsView
@@ -298,9 +317,16 @@ function NudgeSection({
 
 const emptyDraft: CreateLifeItemInput = { type: "routine", title: "", category: "" };
 
-function AddView({ onCreate }: { onCreate: (input: CreateLifeItemInput) => void }) {
+function AddView({
+  onCreate,
+  initialDraft
+}: {
+  onCreate: (input: CreateLifeItemInput) => void;
+  initialDraft?: CreateLifeItemInput | null;
+}) {
   const [prompt, setPrompt] = useState("");
-  const [draft, setDraft] = useState<CreateLifeItemInput | null>(null);
+  // Seeded (e.g. from a clicked calendar day) → skip straight to the form.
+  const [draft, setDraft] = useState<CreateLifeItemInput | null>(initialDraft ?? null);
   const [parsing, setParsing] = useState(false);
   const [parseError, setParseError] = useState<string | null>(null);
 
@@ -695,11 +721,28 @@ type CalendarViewProps = {
   hiddenCategories: Set<string>;
   onToggleCategory: (category: string) => void;
   onShowAll: () => void;
+  onDayClick: (dayKey: string) => void;
 };
+
+function weekdayName(dayKey: string): string {
+  return WEEKDAY_NAMES[parseDateKey(dayKey).getUTCDay()] ?? "";
+}
+
+function activateOnKey(event: React.KeyboardEvent, action: () => void) {
+  if (event.key === "Enter" || event.key === " ") {
+    event.preventDefault();
+    action();
+  }
+}
 
 // Interactive legend + filter: lists every category the user has (so hidden
 // ones stay reachable) and toggles them in/out of the calendar on click.
-function CategoryFilter({ items, hiddenCategories, onToggleCategory, onShowAll }: CalendarViewProps) {
+function CategoryFilter({
+  items,
+  hiddenCategories,
+  onToggleCategory,
+  onShowAll
+}: Omit<CalendarViewProps, "onDayClick">) {
   const categories = useMemo(() => {
     const seen = new Set(items.filter(i => !i.archived).map(i => i.category).filter(Boolean));
     return Array.from(seen).sort((a, b) => a.localeCompare(b));
@@ -740,7 +783,7 @@ function CategoryFilter({ items, hiddenCategories, onToggleCategory, onShowAll }
   );
 }
 
-function WeekView({ items, hiddenCategories, onToggleCategory, onShowAll }: CalendarViewProps) {
+function WeekView({ items, hiddenCategories, onToggleCategory, onShowAll, onDayClick }: CalendarViewProps) {
   const [weekOffset, setWeekOffset] = useState(0);
   const todayKey = toDateKey(new Date());
   const activeItems = useMemo(
@@ -809,7 +852,17 @@ function WeekView({ items, hiddenCategories, onToggleCategory, onShowAll }: Cale
           const dayItems = itemsForDay(dayKey);
           const isToday = dayKey === todayKey;
           return (
-            <div key={dayKey} className={`week-col${isToday ? " week-col--today" : ""}`}>
+            <div
+              key={dayKey}
+              className={`week-col cal-clickable${isToday ? " week-col--today" : ""}`}
+              role="button"
+              tabIndex={0}
+              aria-label={`Add a weekly reminder on ${weekdayName(dayKey)}`}
+              onClick={() => onDayClick(dayKey)}
+              onKeyDown={(event) => activateOnKey(event, () => onDayClick(dayKey))}
+              title={`Add a weekly reminder on ${weekdayName(dayKey)}`}
+            >
+              <span className="cal-add-hint" aria-hidden="true">＋</span>
               <div className="week-col-header">
                 <span className="week-col-dayname">{DAY_NAMES[i]}</span>
                 <span className={`week-col-date${isToday ? " week-col-date--today" : ""}`}>
@@ -820,7 +873,7 @@ function WeekView({ items, hiddenCategories, onToggleCategory, onShowAll }: Cale
                 {dayItems.length === 0
                   ? <p className="cal-empty">—</p>
                   : dayItems.map(item => (
-                    <div key={item.id} className="cal-pill" style={categoryPillStyle(item.category)}>{item.title}</div>
+                    <div key={item.id} className="cal-pill" style={categoryPillStyle(item.category)} onClick={(event) => event.stopPropagation()}>{item.title}</div>
                   ))
                 }
               </div>
@@ -832,7 +885,7 @@ function WeekView({ items, hiddenCategories, onToggleCategory, onShowAll }: Cale
   );
 }
 
-function MonthView({ items, hiddenCategories, onToggleCategory, onShowAll }: CalendarViewProps) {
+function MonthView({ items, hiddenCategories, onToggleCategory, onShowAll, onDayClick }: CalendarViewProps) {
   const todayKey = toDateKey(new Date());
   const todayYear = Number(todayKey.slice(0, 4));
   const todayMonth = Number(todayKey.slice(5, 7)) - 1; // 0-indexed
@@ -918,15 +971,22 @@ function MonthView({ items, hiddenCategories, onToggleCategory, onShowAll }: Cal
             <div
               key={dayKey}
               className={[
-                "month-cell",
+                "month-cell cal-clickable",
                 inMonth ? "" : "month-cell--out",
                 isToday ? "month-cell--today" : ""
               ].filter(Boolean).join(" ")}
+              role="button"
+              tabIndex={0}
+              aria-label={`Add a weekly reminder on ${weekdayName(dayKey)}`}
+              onClick={() => onDayClick(dayKey)}
+              onKeyDown={(event) => activateOnKey(event, () => onDayClick(dayKey))}
+              title={`Add a weekly reminder on ${weekdayName(dayKey)}`}
             >
+              <span className="cal-add-hint" aria-hidden="true">＋</span>
               <span className={`month-cell-num${isToday ? " month-cell-num--today" : ""}`}>{dayNum}</span>
               <div className="month-cell-items">
                 {dayItems.map(item => (
-                  <div key={item.id} className="cal-pill" style={categoryPillStyle(item.category)}>{item.title}</div>
+                  <div key={item.id} className="cal-pill" style={categoryPillStyle(item.category)} onClick={(event) => event.stopPropagation()}>{item.title}</div>
                 ))}
               </div>
             </div>
