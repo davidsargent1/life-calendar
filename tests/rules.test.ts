@@ -233,6 +233,40 @@ describe("life reminder rules", () => {
     expect(nudge.dueDate).toBe("2026-07-13"); // next Monday
   });
 
+  it("advances a full week even when completed off the scheduled weekday", () => {
+    // weeklyDay Monday, completed on a Sunday — must not re-nag the next day
+    const sundayDone: LifeItem = {
+      ...baseItem,
+      cadenceDays: null,
+      weeklyDay: 1,
+      lastCompletedAt: "2026-07-12", // Sunday
+      createdAt: "2026-06-29T12:00:00.000Z"
+    };
+    expect(calculateDueDate(sundayDone, "2026-07-12")).toBe("2026-07-20");
+
+    // weeklyDay Friday, completed on a Wednesday — next due is the following Friday
+    const wednesdayDone: LifeItem = {
+      ...baseItem,
+      cadenceDays: null,
+      weeklyDay: 5,
+      lastCompletedAt: "2026-07-01", // Wednesday
+      createdAt: "2026-06-29T12:00:00.000Z"
+    };
+    expect(calculateDueDate(wednesdayDone, "2026-07-01")).toBe("2026-07-10");
+  });
+
+  it("is due the same day when created on its scheduled weekday", () => {
+    const item: LifeItem = {
+      ...baseItem,
+      cadenceDays: null,
+      weeklyDay: 3, // Wednesday
+      lastCompletedAt: null,
+      createdAt: "2026-07-01T12:00:00.000Z" // Wednesday
+    };
+    expect(calculateDueDate(item, "2026-07-01")).toBe("2026-07-01");
+    expect(toNudge(item, "2026-07-01").urgency).toBe("today");
+  });
+
   it("marks a missed weekly occurrence overdue until completed", () => {
     const item: LifeItem = {
       ...baseItem,
