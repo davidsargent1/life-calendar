@@ -14,6 +14,8 @@ export type LifeItem = {
   // monthlyWeek: 1-4 (first..fourth) or -1 (last); monthlyWeekday: 0 (Sun) - 6 (Sat).
   monthlyWeek: number | null;
   monthlyWeekday: number | null;
+  // Weekly recurrence on a fixed weekday, e.g. every Monday. 0 (Sun) - 6 (Sat).
+  weeklyDay: number | null;
   lastCompletedAt: string | null;
   contactName: string | null;
   archived: boolean;
@@ -52,6 +54,7 @@ export type CreateLifeItemInput = {
   reminderLeadDays?: number | null;
   monthlyWeek?: number | null;
   monthlyWeekday?: number | null;
+  weeklyDay?: number | null;
   contactName?: string | null;
 };
 

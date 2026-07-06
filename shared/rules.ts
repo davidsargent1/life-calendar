@@ -1,5 +1,5 @@
 import type { LifeItem, TodayNudge, TodayResponse, Urgency } from "./types";
-import { addDays, daysBetween, nextBirthdayDate, nthWeekdayOfMonth } from "./dates";
+import { addDays, daysBetween, nextBirthdayDate, nextWeekday, nthWeekdayOfMonth } from "./dates";
 
 const SOON_WINDOW_DAYS = 7;
 
@@ -45,6 +45,16 @@ export function calculateDueDate(item: LifeItem, todayKey: string): string | nul
 
   if (item.monthlyWeek != null && item.monthlyWeekday != null) {
     return nextMonthlyOccurrence(todayKey, item.monthlyWeek, item.monthlyWeekday, item.lastCompletedAt);
+  }
+
+  if (item.weeklyDay != null) {
+    // Anchor the first occurrence to creation (like interval mode). On
+    // completion, snap to the occurrence the completion satisfies (the
+    // weekday on/after it) then advance a full week — so completing early or
+    // late still yields a ~weekly gap rather than re-nagging within days.
+    return item.lastCompletedAt
+      ? nextWeekday(nextWeekday(item.lastCompletedAt, item.weeklyDay, true), item.weeklyDay, false)
+      : nextWeekday(item.createdAt.slice(0, 10), item.weeklyDay, true);
   }
 
   if (item.cadenceDays && item.lastCompletedAt) {

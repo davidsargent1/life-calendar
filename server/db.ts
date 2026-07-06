@@ -49,6 +49,9 @@ export function migrate(): void {
   if (!cols.includes("monthly_weekday")) {
     db.exec("ALTER TABLE items ADD COLUMN monthly_weekday INTEGER");
   }
+  if (!cols.includes("weekly_day")) {
+    db.exec("ALTER TABLE items ADD COLUMN weekly_day INTEGER");
+  }
 }
 
 export function seedIfEmpty(): void {
@@ -63,11 +66,11 @@ export function seedIfEmpty(): void {
   const insert = db.prepare(`
     INSERT INTO items (
       id, type, title, category, cadence_days, due_date, birthday_month,
-      birthday_day, reminder_lead_days, monthly_week, monthly_weekday,
+      birthday_day, reminder_lead_days, monthly_week, monthly_weekday, weekly_day,
       last_completed_at, contact_name, archived, created_at, updated_at
     ) VALUES (
       @id, @type, @title, @category, @cadenceDays, @dueDate, @birthdayMonth,
-      @birthdayDay, @reminderLeadDays, @monthlyWeek, @monthlyWeekday,
+      @birthdayDay, @reminderLeadDays, @monthlyWeek, @monthlyWeekday, @weeklyDay,
       @lastCompletedAt, @contactName, @archived, @createdAt, @updatedAt
     )
   `);
@@ -85,6 +88,7 @@ export function seedIfEmpty(): void {
       reminderLeadDays: null,
       monthlyWeek: null,
       monthlyWeekday: null,
+      weeklyDay: null,
       lastCompletedAt: offsetDate(today, -34),
       contactName: "Grandma",
       archived: false,
@@ -103,6 +107,7 @@ export function seedIfEmpty(): void {
       reminderLeadDays: null,
       monthlyWeek: null,
       monthlyWeekday: null,
+      weeklyDay: null,
       lastCompletedAt: offsetDate(today, -7),
       contactName: null,
       archived: false,
@@ -121,6 +126,7 @@ export function seedIfEmpty(): void {
       reminderLeadDays: null,
       monthlyWeek: null,
       monthlyWeekday: null,
+      weeklyDay: null,
       lastCompletedAt: offsetDate(today, -10),
       contactName: null,
       archived: false,
@@ -139,6 +145,7 @@ export function seedIfEmpty(): void {
       reminderLeadDays: 7,
       monthlyWeek: null,
       monthlyWeekday: null,
+      weeklyDay: null,
       lastCompletedAt: null,
       contactName: "Maya",
       archived: false,
@@ -196,6 +203,7 @@ export function createItem(input: CreateLifeItemInput): LifeItem {
     reminderLeadDays: input.reminderLeadDays ?? null,
     monthlyWeek: input.monthlyWeek ?? null,
     monthlyWeekday: input.monthlyWeekday ?? null,
+    weeklyDay: input.weeklyDay ?? null,
     lastCompletedAt: null,
     contactName: input.contactName?.trim() || null,
     archived: false,
@@ -206,11 +214,11 @@ export function createItem(input: CreateLifeItemInput): LifeItem {
   db.prepare(`
     INSERT INTO items (
       id, type, title, category, cadence_days, due_date, birthday_month,
-      birthday_day, reminder_lead_days, monthly_week, monthly_weekday,
+      birthday_day, reminder_lead_days, monthly_week, monthly_weekday, weekly_day,
       last_completed_at, contact_name, archived, created_at, updated_at
     ) VALUES (
       @id, @type, @title, @category, @cadenceDays, @dueDate, @birthdayMonth,
-      @birthdayDay, @reminderLeadDays, @monthlyWeek, @monthlyWeekday,
+      @birthdayDay, @reminderLeadDays, @monthlyWeek, @monthlyWeekday, @weeklyDay,
       @lastCompletedAt, @contactName, @archived, @createdAt, @updatedAt
     )
   `).run(toDbParams(item));
@@ -249,6 +257,7 @@ export function updateItem(id: string, input: UpdateLifeItemInput): LifeItem | n
       reminder_lead_days = @reminderLeadDays,
       monthly_week = @monthlyWeek,
       monthly_weekday = @monthlyWeekday,
+      weekly_day = @weeklyDay,
       last_completed_at = @lastCompletedAt,
       contact_name = @contactName,
       updated_at = @updatedAt
@@ -304,6 +313,7 @@ function fromRow(row: unknown): LifeItem {
     reminderLeadDays: item.reminder_lead_days as number | null,
     monthlyWeek: item.monthly_week as number | null,
     monthlyWeekday: item.monthly_weekday as number | null,
+    weeklyDay: item.weekly_day as number | null,
     lastCompletedAt: item.last_completed_at as string | null,
     contactName: item.contact_name as string | null,
     archived: Boolean(item.archived),
@@ -325,6 +335,7 @@ function toDbParams(item: LifeItem): Record<string, string | number | null> {
     reminderLeadDays: item.reminderLeadDays,
     monthlyWeek: item.monthlyWeek,
     monthlyWeekday: item.monthlyWeekday,
+    weeklyDay: item.weeklyDay,
     lastCompletedAt: item.lastCompletedAt,
     contactName: item.contactName,
     archived: item.archived ? 1 : 0,

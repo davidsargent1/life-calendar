@@ -14,6 +14,7 @@ const monthlyItem: LifeItem = {
   reminderLeadDays: null,
   monthlyWeek: 3,
   monthlyWeekday: 4, // Thursday
+  weeklyDay: null,
   lastCompletedAt: null,
   contactName: null,
   archived: false,
@@ -36,9 +37,16 @@ describe("reminder draft round-trip", () => {
     expect(payload.cadenceDays).toBeNull();
   });
 
-  it("opens interval and one-off items in the right mode", () => {
+  it("opens interval, weekly, and one-off items in the right mode", () => {
     expect(initialRepeatMode(itemToDraft({ ...monthlyItem, monthlyWeek: null, monthlyWeekday: null, cadenceDays: 7 }))).toBe("interval");
     expect(initialRepeatMode(itemToDraft({ ...monthlyItem, monthlyWeek: null, monthlyWeekday: null, dueDate: "2026-07-04" }))).toBe("oneoff");
+    expect(initialRepeatMode(itemToDraft({ ...monthlyItem, monthlyWeek: null, monthlyWeekday: null, weeklyDay: 1 }))).toBe("weekly");
+  });
+
+  it("preserves a weekly schedule through the edit round-trip", () => {
+    const draft = itemToDraft({ ...monthlyItem, monthlyWeek: null, monthlyWeekday: null, weeklyDay: 1 });
+    expect(draft.weeklyDay).toBe(1);
+    expect(applicablePayload({ ...draft, title: "edited" }).weeklyDay).toBe(1);
   });
 
   it("drops the monthly schedule when the type becomes birthday", () => {

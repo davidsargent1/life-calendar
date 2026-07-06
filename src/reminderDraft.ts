@@ -1,6 +1,6 @@
 import type { CreateLifeItemInput, LifeItem } from "../shared/types";
 
-export type RepeatMode = "interval" | "monthly" | "oneoff";
+export type RepeatMode = "interval" | "weekly" | "monthly" | "oneoff";
 
 // Copy an existing item into an editable draft. Kept as one function so a
 // newly added field can't be silently dropped by one of several call sites.
@@ -16,12 +16,14 @@ export function itemToDraft(item: LifeItem): CreateLifeItemInput {
     reminderLeadDays: item.reminderLeadDays,
     monthlyWeek: item.monthlyWeek,
     monthlyWeekday: item.monthlyWeekday,
+    weeklyDay: item.weeklyDay,
     contactName: item.contactName
   };
 }
 
 export function initialRepeatMode(draft: CreateLifeItemInput): RepeatMode {
   if (draft.monthlyWeek != null && draft.monthlyWeekday != null) return "monthly";
+  if (draft.weeklyDay != null) return "weekly";
   if (draft.dueDate) return "oneoff";
   return "interval";
 }
@@ -41,6 +43,7 @@ export function applicablePayload(draft: CreateLifeItemInput): CreateLifeItemInp
     dueDate: isBirthday ? null : draft.dueDate ?? null,
     monthlyWeek: isBirthday ? null : draft.monthlyWeek ?? null,
     monthlyWeekday: isBirthday ? null : draft.monthlyWeekday ?? null,
+    weeklyDay: isBirthday ? null : draft.weeklyDay ?? null,
     birthdayMonth: isBirthday ? draft.birthdayMonth ?? null : null,
     birthdayDay: isBirthday ? draft.birthdayDay ?? null : null,
     reminderLeadDays: isBirthday ? draft.reminderLeadDays ?? null : null,
