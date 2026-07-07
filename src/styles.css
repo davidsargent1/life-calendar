@@ -278,6 +278,22 @@ h3 {
   gap: 12px;
 }
 
+.nudge-card--clickable {
+  cursor: pointer;
+  transition: border-color 0.12s ease, background 0.12s ease;
+}
+
+.nudge-card--clickable:hover {
+  background: #f4efe3;
+  border-color: #d3c6ac;
+}
+
+.nudge-card--clickable:focus-visible {
+  border-color: #1f7a5a;
+  outline: 2px solid #1f7a5a;
+  outline-offset: 1px;
+}
+
 .nudge-message {
   color: #121b16;
   font-size: 1.08rem;
@@ -538,6 +554,20 @@ h3 {
   line-height: 1.3;
   padding: 3px 8px;
   word-break: break-word;
+}
+
+/* Pills that open the reminder's edit form when clicked/tapped. */
+.cal-pill--clickable {
+  cursor: pointer;
+}
+
+.cal-pill--clickable:hover {
+  filter: brightness(0.96);
+}
+
+.cal-pill--clickable:focus-visible {
+  outline: 2px solid #1f7a5a;
+  outline-offset: 1px;
 }
 
 /* Small colour swatch used in legends and list meta-lines. */
