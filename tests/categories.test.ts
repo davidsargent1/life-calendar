@@ -6,7 +6,8 @@ import {
   isBirthdayCategory,
   isPeopleCategory,
   isPresetCategory,
-  normalizeCategory
+  normalizeCategory,
+  resolveCategory
 } from "../shared/categories";
 
 describe("category presets", () => {
@@ -34,6 +35,15 @@ describe("category presets", () => {
   it("preserves genuinely custom categories (trimmed)", () => {
     expect(normalizeCategory("  Garden ")).toBe("Garden");
     expect(normalizeCategory("Garage")).toBe("Garage");
+  });
+
+  it("resolveCategory coerces to Birthdays when birthday dates are present", () => {
+    // Misclassified / un-normalized labels become Birthdays once dates exist.
+    expect(resolveCategory("People", 6, 3)).toBe(BIRTHDAY_CATEGORY);
+    expect(resolveCategory("Events", 12, 25)).toBe(BIRTHDAY_CATEGORY);
+    // Without both dates, the category is left untouched.
+    expect(resolveCategory("Home", null, null)).toBe("Home");
+    expect(resolveCategory("Home", 6, null)).toBe("Home");
   });
 
   it("returns an empty string for blank input", () => {

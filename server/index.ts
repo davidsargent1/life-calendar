@@ -16,7 +16,7 @@ import {
   updateItem
 } from "./db";
 import { isDateKey, toDateKey } from "../shared/dates";
-import { PRESET_CATEGORIES } from "../shared/categories";
+import { DEFAULT_CATEGORY, PRESET_CATEGORIES, isBirthdayCategory, normalizeCategory, resolveCategory } from "../shared/categories";
 import { buildToday } from "../shared/rules";
 import type { CreateLifeItemInput, UpdateLifeItemInput } from "../shared/types";
 
@@ -80,7 +80,7 @@ function validateParsedReminder(raw: unknown): CreateLifeItemInput {
     title: String(obj.title).trim()
   };
 
-  if (typeof obj.category === "string") result.category = obj.category;
+  if (typeof obj.category === "string" && obj.category.trim()) result.category = normalizeCategory(obj.category);
   if (typeof obj.cadenceDays === "number" && obj.cadenceDays > 0) result.cadenceDays = Math.round(obj.cadenceDays);
   if (typeof obj.dueDate === "string" && isDateKey(obj.dueDate)) result.dueDate = obj.dueDate;
   if (typeof obj.birthdayMonth === "number" && obj.birthdayMonth >= 1 && obj.birthdayMonth <= 12) result.birthdayMonth = Math.round(obj.birthdayMonth);
@@ -92,6 +92,10 @@ function validateParsedReminder(raw: unknown): CreateLifeItemInput {
   }
   if (isValidWeekday(obj.weeklyDay)) result.weeklyDay = obj.weeklyDay as number;
   if (typeof obj.contactName === "string") result.contactName = obj.contactName;
+
+  // Keep the category consistent with the birthday fields, and never return a
+  // category-less draft (the form has no "none" option).
+  result.category = resolveCategory(result.category ?? DEFAULT_CATEGORY, result.birthdayMonth ?? null, result.birthdayDay ?? null);
 
   return result;
 }
@@ -251,6 +255,12 @@ app.post("/api/items", (request, response) => {
 
   if (input.weeklyDay !== undefined && input.weeklyDay !== null && !isValidWeekday(input.weeklyDay)) {
     response.status(400).json({ error: "weeklyDay must be 0 (Sunday) - 6 (Saturday)" });
+    return;
+  }
+
+  // A Birthdays item with no date would be scheduled nowhere and stay invisible.
+  if (isBirthdayCategory(normalizeCategory(input.category ?? "")) && (input.birthdayMonth == null || input.birthdayDay == null)) {
+    response.status(400).json({ error: "Birthdays items need a birthday month and day" });
     return;
   }
 

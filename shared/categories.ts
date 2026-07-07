@@ -38,6 +38,21 @@ export function isPeopleCategory(category: string | null | undefined): boolean {
   return category === PEOPLE_CATEGORY;
 }
 
+// Birthday date fields only make sense under the Birthdays category, so an
+// item that carries them is a Birthdays item regardless of the raw label the
+// user or AI supplied (e.g. "birthday", "People", a misclassification). Keeps
+// the "has birthday dates" and "is Birthdays category" states from diverging.
+export function resolveCategory(
+  category: string,
+  birthdayMonth: number | null,
+  birthdayDay: number | null
+): string {
+  if (birthdayMonth != null && birthdayDay != null) {
+    return BIRTHDAY_CATEGORY;
+  }
+  return category;
+}
+
 // Collapse case/whitespace variants of a preset onto its canonical form
 // ("chores" -> "Chores"). Non-preset values are returned trimmed, so
 // genuinely custom categories are preserved as-is.

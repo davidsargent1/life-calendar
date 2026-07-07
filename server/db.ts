@@ -2,7 +2,7 @@ import Database from "better-sqlite3";
 import { mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { toDateKey } from "../shared/dates";
-import { BIRTHDAY_CATEGORY, DEFAULT_CATEGORY, PEOPLE_CATEGORY, normalizeCategory } from "../shared/categories";
+import { BIRTHDAY_CATEGORY, DEFAULT_CATEGORY, PEOPLE_CATEGORY, normalizeCategory, resolveCategory } from "../shared/categories";
 import type { CreateLifeItemInput, LifeItem, UpdateLifeItemInput } from "../shared/types";
 
 const dbPath = join(process.cwd(), "data", "life-calendar.sqlite");
@@ -56,9 +56,11 @@ export function migrate(): void {
   // special categories that now carry their behaviour, then the column is
   // dropped. Runs once against pre-merge databases.
   if (cols.includes("type")) {
-    db.prepare("UPDATE items SET category = ? WHERE type = 'birthday'").run(BIRTHDAY_CATEGORY);
-    db.prepare("UPDATE items SET category = ? WHERE type = 'contact'").run(PEOPLE_CATEGORY);
-    db.exec("ALTER TABLE items DROP COLUMN type");
+    db.transaction(() => {
+      db.prepare("UPDATE items SET category = ? WHERE type = 'birthday'").run(BIRTHDAY_CATEGORY);
+      db.prepare("UPDATE items SET category = ? WHERE type = 'contact'").run(PEOPLE_CATEGORY);
+      db.exec("ALTER TABLE items DROP COLUMN type");
+    })();
   }
 }
 
@@ -198,7 +200,11 @@ export function createItem(input: CreateLifeItemInput): LifeItem {
   const item: LifeItem = {
     id: crypto.randomUUID(),
     title: input.title.trim(),
-    category: normalizeCategory(input.category ?? "") || DEFAULT_CATEGORY,
+    category: resolveCategory(
+      normalizeCategory(input.category ?? "") || DEFAULT_CATEGORY,
+      input.birthdayMonth ?? null,
+      input.birthdayDay ?? null
+    ),
     cadenceDays: input.cadenceDays ?? null,
     dueDate: input.dueDate ?? null,
     birthdayMonth: input.birthdayMonth ?? null,
@@ -246,6 +252,8 @@ export function updateItem(id: string, input: UpdateLifeItemInput): LifeItem | n
     contactName: input.contactName === undefined ? existing.contactName : (input.contactName?.trim() || null),
     updatedAt: new Date().toISOString()
   };
+  // Keep category consistent with the (merged) birthday fields.
+  updated.category = resolveCategory(updated.category, updated.birthdayMonth, updated.birthdayDay);
 
   db.prepare(`
     UPDATE items
