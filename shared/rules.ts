@@ -166,6 +166,7 @@ function occurrenceNudge(occurrence: Occurrence, todayKey: string): TodayNudge {
   return {
     item,
     key: occurrence.kind === "primary" ? item.id : `${item.id}:${occurrence.kind}`,
+    kind: occurrence.kind,
     title,
     urgency,
     dueDate,
@@ -182,13 +183,15 @@ export function toNudge(item: LifeItem, todayKey: string): TodayNudge {
 }
 
 // Nudges for a single item, expanding a birthday's lead reminder into its own
-// card. Once the birthday is completed for the cycle both occurrences roll to
-// next year and read as "done"; keep only the primary so the board shows one
-// "done" card rather than a duplicate.
+// card. The lead is an informational heads-up, not a completable task: it only
+// surfaces while it is upcoming or due (today/soon). Drop it once it is "done"
+// (both occurrences roll to next year, so the primary already shows the one
+// "done" card) or "overdue" (its date has passed — the birthday itself, still
+// primary, carries the reminder from here on).
 function itemNudges(item: LifeItem, todayKey: string): TodayNudge[] {
   return itemOccurrences(item, todayKey)
     .map((occurrence) => occurrenceNudge(occurrence, todayKey))
-    .filter((nudge) => !(nudge.key.endsWith(":lead") && nudge.urgency === "done"));
+    .filter((nudge) => !(nudge.kind === "lead" && (nudge.urgency === "done" || nudge.urgency === "overdue")));
 }
 
 export function buildToday(items: LifeItem[], todayKey: string): TodayResponse {

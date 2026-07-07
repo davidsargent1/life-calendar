@@ -27,6 +27,9 @@ export type TodayNudge = {
   // Unique per occurrence: the item id for the primary nudge, suffixed (e.g.
   // ":lead") for a birthday's derived "remind before" reminder.
   key: string;
+  // "primary" is the item's own actionable reminder; "lead" is a birthday's
+  // informational "remind before" heads-up (not completable on its own).
+  kind: "primary" | "lead";
   // Display title for this occurrence — the item's own title, or the
   // "N days until …" label for a lead reminder.
   title: string;

@@ -294,7 +294,7 @@ function NudgeSection({
                   {nudge.dueDate ? ` • ${dueLabel(nudge)}` : ""}
                 </p>
               </div>
-              {tone !== "done" && (
+              {tone !== "done" && nudge.kind !== "lead" && (
                 <button className="done-button" onClick={() => onComplete(nudge)} aria-label={`Mark ${nudge.title} done`}>
                   Done
                 </button>
@@ -796,7 +796,7 @@ function WeekView({ items, hiddenCategories, onToggleCategory, onShowAll, onDayC
   }
 
   const overdueItems = weekOffset === 0
-    ? occurrences.filter(occ => occ.dueDate !== null && occ.dueDate < todayKey)
+    ? occurrences.filter(occ => occ.kind !== "lead" && occ.dueDate !== null && occ.dueDate < todayKey)
     : [];
 
   return (
@@ -901,7 +901,7 @@ function MonthView({ items, hiddenCategories, onToggleCategory, onShowAll, onDay
 
   const isCurrentMonth = year === todayYear && month === todayMonth;
   const overdueItems = isCurrentMonth
-    ? occurrences.filter(occ => occ.dueDate !== null && occ.dueDate < todayKey)
+    ? occurrences.filter(occ => occ.kind !== "lead" && occ.dueDate !== null && occ.dueDate < todayKey)
     : [];
 
   return (

@@ -112,8 +112,33 @@ describe("life reminder rules", () => {
     const response = buildToday([item], "2026-05-19");
     const lead = response.sections.today.find((n) => n.key === "maya:lead");
     const birthday = response.sections.soon.find((n) => n.key === "maya");
+    expect(lead?.kind).toBe("lead");
     expect(lead?.message).toBe("7 days until Maya's birthday.");
     expect(birthday?.message).toBe("Maya's birthday.");
+  });
+
+  it("drops the lead reminder once its date passes but keeps the birthday", () => {
+    const item: LifeItem = {
+      ...baseItem,
+      id: "maya",
+      category: BIRTHDAY_CATEGORY,
+      title: "Maya's birthday",
+      cadenceDays: null,
+      birthdayMonth: 5,
+      birthdayDay: 26,
+      reminderLeadDays: 7,
+      lastCompletedAt: null
+    };
+
+    // Three days before the birthday — the lead date (05-19) has passed. The
+    // stale "7 days until" card must not surface anywhere; the birthday itself
+    // stays on the board.
+    const response = buildToday([item], "2026-05-23");
+    const allNudges = Object.values(response.sections).flat();
+    expect(allNudges.find((n) => n.key === "maya:lead")).toBeUndefined();
+
+    const birthday = response.sections.soon.find((n) => n.key === "maya");
+    expect(birthday?.dueDate).toBe("2026-05-26");
   });
 
   it("does not resurface a birthday reminder after it is completed for the current cycle", () => {
