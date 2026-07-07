@@ -16,7 +16,7 @@ import {
   updateItem
 } from "./db";
 import { isDateKey, toDateKey } from "../shared/dates";
-import { PRESET_CATEGORIES } from "../shared/categories";
+import { DEFAULT_CATEGORY, PRESET_CATEGORIES, isBirthdayCategory, normalizeCategory, resolveCategory } from "../shared/categories";
 import { buildToday } from "../shared/rules";
 import type { CreateLifeItemInput, UpdateLifeItemInput } from "../shared/types";
 
@@ -44,8 +44,6 @@ const parseReminderLimiter = rateLimit({
 const LLM_BASE_URL = process.env.LLM_BASE_URL; // unset = OpenAI's default endpoint
 const LLM_API_KEY = process.env.LLM_API_KEY ?? process.env.OPENAI_API_KEY;
 const LLM_MODEL = process.env.LLM_MODEL ?? "gpt-4o-mini";
-
-const VALID_TYPES = new Set(["contact", "chore", "birthday", "shopping", "routine"]);
 
 const DAYS_IN_MONTH = [0, 31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
 
@@ -77,14 +75,12 @@ function validateParsedReminder(raw: unknown): CreateLifeItemInput {
   const obj = raw as Record<string, unknown>;
 
   if (typeof obj.title !== "string" || !obj.title.trim()) throw new Error("AI response missing title");
-  if (!VALID_TYPES.has(obj.type as string)) throw new Error("AI response has invalid type");
 
   const result: CreateLifeItemInput = {
-    type: obj.type as CreateLifeItemInput["type"],
     title: String(obj.title).trim()
   };
 
-  if (typeof obj.category === "string") result.category = obj.category;
+  if (typeof obj.category === "string" && obj.category.trim()) result.category = normalizeCategory(obj.category);
   if (typeof obj.cadenceDays === "number" && obj.cadenceDays > 0) result.cadenceDays = Math.round(obj.cadenceDays);
   if (typeof obj.dueDate === "string" && isDateKey(obj.dueDate)) result.dueDate = obj.dueDate;
   if (typeof obj.birthdayMonth === "number" && obj.birthdayMonth >= 1 && obj.birthdayMonth <= 12) result.birthdayMonth = Math.round(obj.birthdayMonth);
@@ -96,6 +92,10 @@ function validateParsedReminder(raw: unknown): CreateLifeItemInput {
   }
   if (isValidWeekday(obj.weeklyDay)) result.weeklyDay = obj.weeklyDay as number;
   if (typeof obj.contactName === "string") result.contactName = obj.contactName;
+
+  // Keep the category consistent with the birthday fields, and never return a
+  // category-less draft (the form has no "none" option).
+  result.category = resolveCategory(result.category ?? DEFAULT_CATEGORY, result.birthdayMonth ?? null, result.birthdayDay ?? null);
 
   return result;
 }
@@ -123,7 +123,6 @@ app.post("/api/parse-reminder", parseReminderLimiter, async (request, response) 
   const systemPrompt = `You convert natural-language reminder descriptions into structured JSON for a life calendar app.
 Return ONLY valid JSON matching this TypeScript type (omit null/undefined fields):
 {
-  type: "contact" | "chore" | "birthday" | "shopping" | "routine",
   title: string,
   category?: string,
   cadenceDays?: number,
@@ -137,24 +136,21 @@ Return ONLY valid JSON matching this TypeScript type (omit null/undefined fields
   contactName?: string
 }
 Rules:
-- "contact" type = calling/texting/visiting a person; set contactName
-- "birthday" type = birthday reminders; set birthdayMonth/birthdayDay/reminderLeadDays
-- "chore" type = household tasks
-- "shopping" type = buying things
-- "routine" type = personal habits
+- category should be one of these preferred labels when one fits: ${PRESET_CATEGORIES.join(", ")}. Only invent a new short label if none of these apply
+- for birthday reminders use category "Birthdays" and set birthdayMonth/birthdayDay/reminderLeadDays
+- for calling/texting/visiting a person use category "People" and set contactName
 - cadenceDays = how often to repeat in days (e.g. "every 2 weeks" = 14)
 - for "nth weekday of the month" recurrences (e.g. "every 3rd Thursday", "last Monday") set monthlyWeek (1-4, or -1 for last) and monthlyWeekday (0=Sunday..6=Saturday) instead of cadenceDays
 - for weekly recurrences on a specific day (e.g. "every Monday", "weekly on Friday") set weeklyDay (0=Sunday..6=Saturday) instead of cadenceDays
-- category should be one of these preferred labels when one fits: ${PRESET_CATEGORIES.join(", ")}. Only invent a new short label if none of these apply
 - Do not include null values, only include fields that have meaningful values
 
 Examples:
-"call mom every 2 weeks" -> {"type":"contact","title":"Call Mom","contactName":"Mom","category":"People","cadenceDays":14}
-"clean the kitchen weekly" -> {"type":"chore","title":"Clean the kitchen","category":"Chores","cadenceDays":7}
-"dad's birthday is June 3, remind me 5 days before" -> {"type":"birthday","title":"Dad's birthday","contactName":"Dad","category":"People","birthdayMonth":6,"birthdayDay":3,"reminderLeadDays":5}
-"water the plants every 3rd thursday" -> {"type":"chore","title":"Water the plants","category":"Home","monthlyWeek":3,"monthlyWeekday":4}
-"take out recycling every monday" -> {"type":"chore","title":"Take out recycling","category":"Chores","weeklyDay":1}
-"buy dog food" -> {"type":"shopping","title":"Buy dog food","category":"Shopping"}`;
+"call mom every 2 weeks" -> {"title":"Call Mom","category":"People","contactName":"Mom","cadenceDays":14}
+"clean the kitchen weekly" -> {"title":"Clean the kitchen","category":"Chores","cadenceDays":7}
+"dad's birthday is June 3, remind me 5 days before" -> {"title":"Dad's birthday","category":"Birthdays","contactName":"Dad","birthdayMonth":6,"birthdayDay":3,"reminderLeadDays":5}
+"water the plants every 3rd thursday" -> {"title":"Water the plants","category":"Home","monthlyWeek":3,"monthlyWeekday":4}
+"take out recycling every monday" -> {"title":"Take out recycling","category":"Chores","weeklyDay":1}
+"buy dog food" -> {"title":"Buy dog food","category":"Shopping"}`;
 
   try {
     const msg = await openai.chat.completions.create({
@@ -220,8 +216,8 @@ app.post("/api/items/:id/unarchive", (request, response) => {
 app.post("/api/items", (request, response) => {
   const input = request.body as CreateLifeItemInput;
 
-  if (!input.title?.trim() || !input.type) {
-    response.status(400).json({ error: "title and type are required" });
+  if (!input.title?.trim()) {
+    response.status(400).json({ error: "title is required" });
     return;
   }
 
@@ -259,6 +255,12 @@ app.post("/api/items", (request, response) => {
 
   if (input.weeklyDay !== undefined && input.weeklyDay !== null && !isValidWeekday(input.weeklyDay)) {
     response.status(400).json({ error: "weeklyDay must be 0 (Sunday) - 6 (Saturday)" });
+    return;
+  }
+
+  // A Birthdays item with no date would be scheduled nowhere and stay invisible.
+  if (isBirthdayCategory(normalizeCategory(input.category ?? "")) && (input.birthdayMonth == null || input.birthdayDay == null)) {
+    response.status(400).json({ error: "Birthdays items need a birthday month and day" });
     return;
   }
 
@@ -315,6 +317,21 @@ app.patch("/api/items/:id", (request, response) => {
   if (input.weeklyDay !== undefined && input.weeklyDay !== null && !isValidWeekday(input.weeklyDay)) {
     response.status(400).json({ error: "weeklyDay must be 0 (Sunday) - 6 (Saturday)" });
     return;
+  }
+
+  // Mirror the POST guard: a Birthdays item must keep its month/day after the
+  // merge, or it would be scheduled nowhere and stay invisible.
+  {
+    const existing = getItem(request.params.id);
+    if (existing) {
+      const mergedCategory = normalizeCategory(input.category ?? "") || existing.category;
+      const mergedMonth = input.birthdayMonth !== undefined ? input.birthdayMonth : existing.birthdayMonth;
+      const mergedDay = input.birthdayDay !== undefined ? input.birthdayDay : existing.birthdayDay;
+      if (isBirthdayCategory(mergedCategory) && (mergedMonth == null || mergedDay == null)) {
+        response.status(400).json({ error: "Birthdays items need a birthday month and day" });
+        return;
+      }
+    }
   }
 
   const item = updateItem(request.params.id, input);

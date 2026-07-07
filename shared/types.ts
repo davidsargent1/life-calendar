@@ -1,8 +1,5 @@
-export type LifeItemType = "contact" | "chore" | "birthday" | "shopping" | "routine";
-
 export type LifeItem = {
   id: string;
-  type: LifeItemType;
   title: string;
   category: string;
   cadenceDays: number | null;
@@ -44,7 +41,6 @@ export type TodayResponse = {
 };
 
 export type CreateLifeItemInput = {
-  type: LifeItemType;
   title: string;
   category?: string;
   cadenceDays?: number | null;

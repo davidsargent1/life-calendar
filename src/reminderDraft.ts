@@ -1,4 +1,5 @@
 import { parseDateKey } from "../shared/dates";
+import { DEFAULT_CATEGORY, isBirthdayCategory, isPeopleCategory } from "../shared/categories";
 import type { CreateLifeItemInput, LifeItem } from "../shared/types";
 
 export type RepeatMode = "interval" | "weekly" | "monthly" | "oneoff";
@@ -7,9 +8,8 @@ export type RepeatMode = "interval" | "weekly" | "monthly" | "oneoff";
 // used when a day is clicked in the calendar views.
 export function draftForDay(dayKey: string): CreateLifeItemInput {
   return {
-    type: "routine",
     title: "",
-    category: "",
+    category: DEFAULT_CATEGORY,
     weeklyDay: parseDateKey(dayKey).getUTCDay()
   };
 }
@@ -18,7 +18,6 @@ export function draftForDay(dayKey: string): CreateLifeItemInput {
 // newly added field can't be silently dropped by one of several call sites.
 export function itemToDraft(item: LifeItem): CreateLifeItemInput {
   return {
-    type: item.type,
     title: item.title,
     category: item.category,
     cadenceDays: item.cadenceDays,
@@ -40,15 +39,14 @@ export function initialRepeatMode(draft: CreateLifeItemInput): RepeatMode {
   return "interval";
 }
 
-// Build the save payload from only the fields that apply to the chosen type,
-// sending explicit nulls for the rest. Without this, switching type would
-// silently persist stale values from hidden fields (e.g. a birthday keeping
-// the cadenceDays it had as a chore).
+// Build the save payload from only the fields that apply to the chosen
+// category, sending explicit nulls for the rest. Without this, changing the
+// category would silently persist stale values from hidden fields (e.g. a
+// birthday keeping the cadenceDays it had as a chore).
 export function applicablePayload(draft: CreateLifeItemInput): CreateLifeItemInput {
-  const isBirthday = draft.type === "birthday";
-  const showPerson = isBirthday || draft.type === "contact";
+  const isBirthday = isBirthdayCategory(draft.category);
+  const showPerson = isBirthday || isPeopleCategory(draft.category);
   return {
-    type: draft.type,
     title: draft.title,
     category: draft.category,
     cadenceDays: isBirthday ? null : draft.cadenceDays ?? null,

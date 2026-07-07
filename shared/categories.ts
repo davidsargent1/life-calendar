@@ -1,3 +1,11 @@
+// Category is the single classifier for a reminder. Most categories are just
+// labels, but a couple unlock extra fields (what item "types" used to gate):
+//   Birthdays -> month/day + remind-before fields, recurs yearly
+//   People    -> a Person/contact field and "Call X" wording
+export const BIRTHDAY_CATEGORY = "Birthdays";
+export const PEOPLE_CATEGORY = "People";
+export const DEFAULT_CATEGORY = "Home";
+
 // Curated set of categories offered in the UI and suggested to the AI
 // parser. Keeping a canonical list reduces near-duplicates such as
 // "chores" / "Chores" / "Chore" all coexisting.
@@ -6,10 +14,11 @@ export const PRESET_CATEGORIES = [
   "Chores",
   "Errands",
   "Shopping",
-  "People",
+  PEOPLE_CATEGORY,
   "Health",
   "Finance",
   "Events",
+  BIRTHDAY_CATEGORY,
   "Pets",
   "Maintenance"
 ] as const;
@@ -18,6 +27,30 @@ export type PresetCategory = (typeof PRESET_CATEGORIES)[number];
 
 export function isPresetCategory(value: string): value is PresetCategory {
   return (PRESET_CATEGORIES as readonly string[]).includes(value);
+}
+
+// Special categories that carry the behaviour item types used to gate.
+export function isBirthdayCategory(category: string | null | undefined): boolean {
+  return category === BIRTHDAY_CATEGORY;
+}
+
+export function isPeopleCategory(category: string | null | undefined): boolean {
+  return category === PEOPLE_CATEGORY;
+}
+
+// Birthday date fields only make sense under the Birthdays category, so an
+// item that carries them is a Birthdays item regardless of the raw label the
+// user or AI supplied (e.g. "birthday", "People", a misclassification). Keeps
+// the "has birthday dates" and "is Birthdays category" states from diverging.
+export function resolveCategory(
+  category: string,
+  birthdayMonth: number | null,
+  birthdayDay: number | null
+): string {
+  if (birthdayMonth != null && birthdayDay != null) {
+    return BIRTHDAY_CATEGORY;
+  }
+  return category;
 }
 
 // Collapse case/whitespace variants of a preset onto its canonical form
