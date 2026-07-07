@@ -319,6 +319,21 @@ app.patch("/api/items/:id", (request, response) => {
     return;
   }
 
+  // Mirror the POST guard: a Birthdays item must keep its month/day after the
+  // merge, or it would be scheduled nowhere and stay invisible.
+  {
+    const existing = getItem(request.params.id);
+    if (existing) {
+      const mergedCategory = normalizeCategory(input.category ?? "") || existing.category;
+      const mergedMonth = input.birthdayMonth !== undefined ? input.birthdayMonth : existing.birthdayMonth;
+      const mergedDay = input.birthdayDay !== undefined ? input.birthdayDay : existing.birthdayDay;
+      if (isBirthdayCategory(mergedCategory) && (mergedMonth == null || mergedDay == null)) {
+        response.status(400).json({ error: "Birthdays items need a birthday month and day" });
+        return;
+      }
+    }
+  }
+
   const item = updateItem(request.params.id, input);
 
   if (!item) {
