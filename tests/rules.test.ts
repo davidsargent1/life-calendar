@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { buildMonthGrid, isDateKey, mondayOfWeek, nextWeekday, nthWeekdayOfMonth, toDateKey } from "../shared/dates";
-import { buildToday, calculateDueDate, toNudge } from "../shared/rules";
+import { buildToday, calculateDueDate, itemOccurrences, leadReminderTitle, toNudge } from "../shared/rules";
 import { BIRTHDAY_CATEGORY } from "../shared/categories";
 import type { LifeItem } from "../shared/types";
 
@@ -39,11 +39,11 @@ describe("life reminder rules", () => {
     expect(nudge.message).toBe("Clean bathroom done.");
   });
 
-  it("uses birthday lead time as the due date", () => {
+  it("keeps the primary birthday reminder on the birthday itself", () => {
     const item: LifeItem = {
       ...baseItem,
       category: BIRTHDAY_CATEGORY,
-      title: "Buy Maya's birthday present",
+      title: "Maya's birthday",
       cadenceDays: null,
       birthdayMonth: 5,
       birthdayDay: 26,
@@ -51,15 +51,101 @@ describe("life reminder rules", () => {
       lastCompletedAt: null
     };
 
-    expect(calculateDueDate(item, "2026-05-19")).toBe("2026-05-19");
-    expect(toNudge(item, "2026-05-19").urgency).toBe("today");
+    expect(calculateDueDate(item, "2026-05-19")).toBe("2026-05-26");
+    expect(toNudge(item, "2026-05-26").urgency).toBe("today");
+  });
+
+  it("adds a separate lead occurrence 'N days until X' ahead of the birthday", () => {
+    const item: LifeItem = {
+      ...baseItem,
+      category: BIRTHDAY_CATEGORY,
+      title: "Maya's birthday",
+      cadenceDays: null,
+      birthdayMonth: 5,
+      birthdayDay: 26,
+      reminderLeadDays: 7,
+      lastCompletedAt: null
+    };
+
+    const occurrences = itemOccurrences(item, "2026-05-01");
+    expect(occurrences).toHaveLength(2);
+    expect(occurrences[0]).toMatchObject({ kind: "primary", title: "Maya's birthday", dueDate: "2026-05-26" });
+    expect(occurrences[1]).toMatchObject({
+      kind: "lead",
+      title: "7 days until Maya's birthday",
+      dueDate: "2026-05-19"
+    });
+  });
+
+  it("omits the lead occurrence when no remind-before is set", () => {
+    const item: LifeItem = {
+      ...baseItem,
+      category: BIRTHDAY_CATEGORY,
+      title: "Maya's birthday",
+      cadenceDays: null,
+      birthdayMonth: 5,
+      birthdayDay: 26,
+      reminderLeadDays: null,
+      lastCompletedAt: null
+    };
+
+    const occurrences = itemOccurrences(item, "2026-05-01");
+    expect(occurrences).toHaveLength(1);
+    expect(occurrences[0]).toMatchObject({ kind: "primary", dueDate: "2026-05-26" });
+  });
+
+  it("surfaces both the lead reminder and the birthday on the today board", () => {
+    const item: LifeItem = {
+      ...baseItem,
+      id: "maya",
+      category: BIRTHDAY_CATEGORY,
+      title: "Maya's birthday",
+      cadenceDays: null,
+      birthdayMonth: 5,
+      birthdayDay: 26,
+      reminderLeadDays: 7,
+      lastCompletedAt: null
+    };
+
+    // On the lead date the "7 days until" card is due today; the birthday
+    // itself is still a week out (soon).
+    const response = buildToday([item], "2026-05-19");
+    const lead = response.sections.today.find((n) => n.key === "maya:lead");
+    const birthday = response.sections.soon.find((n) => n.key === "maya");
+    expect(lead?.kind).toBe("lead");
+    expect(lead?.message).toBe("7 days until Maya's birthday.");
+    expect(birthday?.message).toBe("Maya's birthday.");
+  });
+
+  it("drops the lead reminder once its date passes but keeps the birthday", () => {
+    const item: LifeItem = {
+      ...baseItem,
+      id: "maya",
+      category: BIRTHDAY_CATEGORY,
+      title: "Maya's birthday",
+      cadenceDays: null,
+      birthdayMonth: 5,
+      birthdayDay: 26,
+      reminderLeadDays: 7,
+      lastCompletedAt: null
+    };
+
+    // Three days before the birthday — the lead date (05-19) has passed. The
+    // stale "7 days until" card must not surface anywhere; the birthday itself
+    // stays on the board.
+    const response = buildToday([item], "2026-05-23");
+    const allNudges = Object.values(response.sections).flat();
+    expect(allNudges.find((n) => n.key === "maya:lead")).toBeUndefined();
+
+    const birthday = response.sections.soon.find((n) => n.key === "maya");
+    expect(birthday?.dueDate).toBe("2026-05-26");
   });
 
   it("does not resurface a birthday reminder after it is completed for the current cycle", () => {
     const item: LifeItem = {
       ...baseItem,
       category: BIRTHDAY_CATEGORY,
-      title: "Buy Maya's birthday present",
+      title: "Maya's birthday",
       cadenceDays: null,
       birthdayMonth: 5,
       birthdayDay: 26,
@@ -70,7 +156,12 @@ describe("life reminder rules", () => {
     const nudge = toNudge(item, "2026-05-20");
 
     expect(nudge.urgency).not.toBe("overdue");
-    expect(nudge.dueDate).toBe("2027-05-19");
+    expect(nudge.dueDate).toBe("2027-05-26");
+  });
+
+  it("labels a single-day lead reminder without pluralising", () => {
+    expect(leadReminderTitle("Mom's birthday", 1)).toBe("1 day until Mom's birthday");
+    expect(leadReminderTitle("Mom's birthday", 3)).toBe("3 days until Mom's birthday");
   });
 
   it("uses local date parts for kiosk date keys", () => {

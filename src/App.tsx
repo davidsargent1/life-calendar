@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { archiveItem, completeItem, createItem, fetchItems, fetchToday, parseReminder, unarchiveItem, updateItem } from "./api";
 import { buildMonthGrid, formatShortDate, mondayOfWeek, parseDateKey, toDateKey } from "../shared/dates";
 import { DEFAULT_CATEGORY, PRESET_CATEGORIES, isBirthdayCategory, isPeopleCategory, isPresetCategory } from "../shared/categories";
-import { calculateDueDate } from "../shared/rules";
+import { itemOccurrences } from "../shared/rules";
 import { applicablePayload, draftForDay, initialRepeatMode, itemToDraft, type RepeatMode } from "./reminderDraft";
 import type { CreateLifeItemInput, LifeItem, TodayNudge, TodayResponse } from "../shared/types";
 
@@ -285,7 +285,7 @@ function NudgeSection({
       ) : (
         <div className="nudge-list">
           {nudges.map((nudge) => (
-            <article className="nudge-card" key={nudge.item.id}>
+            <article className="nudge-card" key={nudge.key}>
               <div>
                 <p className="nudge-message">{nudge.message}</p>
                 <p className="meta-line">
@@ -294,8 +294,8 @@ function NudgeSection({
                   {nudge.dueDate ? ` • ${dueLabel(nudge)}` : ""}
                 </p>
               </div>
-              {tone !== "done" && (
-                <button className="done-button" onClick={() => onComplete(nudge)} aria-label={`Mark ${nudge.item.title} done`}>
+              {tone !== "done" && nudge.kind !== "lead" && (
+                <button className="done-button" onClick={() => onComplete(nudge)} aria-label={`Mark ${nudge.title} done`}>
                   Done
                 </button>
               )}
@@ -770,9 +770,11 @@ function WeekView({ items, hiddenCategories, onToggleCategory, onShowAll, onDayC
     [items, hiddenCategories]
   );
 
-  // Due date per item computed once against today
-  const dueDates = useMemo(() =>
-    activeItems.map(item => ({ item, dueKey: calculateDueDate(item, todayKey) })),
+  // Occurrences per item computed once against today. A birthday's "remind
+  // before" lead expands into a second occurrence, so one item can appear on
+  // two days (the birthday and the lead reminder).
+  const occurrences = useMemo(() =>
+    activeItems.flatMap(item => itemOccurrences(item, todayKey)),
     [activeItems, todayKey]
   );
 
@@ -789,12 +791,12 @@ function WeekView({ items, hiddenCategories, onToggleCategory, onShowAll, onDayC
   const weekEnd = days[6];
   const rangeLabel = `${formatShortDate(weekStart)} – ${formatShortDate(weekEnd)}`;
 
-  function itemsForDay(dayKey: string): LifeItem[] {
-    return dueDates.filter(({ dueKey }) => dueKey === dayKey).map(({ item }) => item);
+  function itemsForDay(dayKey: string) {
+    return occurrences.filter(occ => occ.dueDate === dayKey);
   }
 
   const overdueItems = weekOffset === 0
-    ? dueDates.filter(({ dueKey }) => dueKey !== null && dueKey < todayKey).map(({ item }) => item)
+    ? occurrences.filter(occ => occ.kind !== "lead" && occ.dueDate !== null && occ.dueDate < todayKey)
     : [];
 
   return (
@@ -812,8 +814,8 @@ function WeekView({ items, hiddenCategories, onToggleCategory, onShowAll, onDayC
         <div className="cal-overdue-band">
           <span className="cal-overdue-label">Overdue</span>
           <div className="cal-overdue-items">
-            {overdueItems.map(item => (
-              <span key={item.id} className="cal-pill" style={categoryPillStyle(item.category)}>{item.title}</span>
+            {overdueItems.map(occ => (
+              <span key={`${occ.item.id}:${occ.kind}`} className="cal-pill" style={categoryPillStyle(occ.item.category)}>{occ.title}</span>
             ))}
           </div>
         </div>
@@ -851,8 +853,8 @@ function WeekView({ items, hiddenCategories, onToggleCategory, onShowAll, onDayC
               <div className="week-col-items">
                 {dayItems.length === 0
                   ? <p className="cal-empty">—</p>
-                  : dayItems.map(item => (
-                    <div key={item.id} className="cal-pill" style={categoryPillStyle(item.category)} onClick={(event) => event.stopPropagation()}>{item.title}</div>
+                  : dayItems.map(occ => (
+                    <div key={`${occ.item.id}:${occ.kind}`} className="cal-pill" style={categoryPillStyle(occ.item.category)} onClick={(event) => event.stopPropagation()}>{occ.title}</div>
                   ))
                 }
               </div>
@@ -876,8 +878,8 @@ function MonthView({ items, hiddenCategories, onToggleCategory, onShowAll, onDay
     [items, hiddenCategories]
   );
 
-  const dueDates = useMemo(() =>
-    activeItems.map(item => ({ item, dueKey: calculateDueDate(item, todayKey) })),
+  const occurrences = useMemo(() =>
+    activeItems.flatMap(item => itemOccurrences(item, todayKey)),
     [activeItems, todayKey]
   );
 
@@ -893,13 +895,13 @@ function MonthView({ items, hiddenCategories, onToggleCategory, onShowAll, onDay
 
   const grid = buildMonthGrid(year, month);
 
-  function itemsForDay(dayKey: string): LifeItem[] {
-    return dueDates.filter(({ dueKey }) => dueKey === dayKey).map(({ item }) => item);
+  function itemsForDay(dayKey: string) {
+    return occurrences.filter(occ => occ.dueDate === dayKey);
   }
 
   const isCurrentMonth = year === todayYear && month === todayMonth;
   const overdueItems = isCurrentMonth
-    ? dueDates.filter(({ dueKey }) => dueKey !== null && dueKey < todayKey).map(({ item }) => item)
+    ? occurrences.filter(occ => occ.kind !== "lead" && occ.dueDate !== null && occ.dueDate < todayKey)
     : [];
 
   return (
@@ -923,8 +925,8 @@ function MonthView({ items, hiddenCategories, onToggleCategory, onShowAll, onDay
         <div className="cal-overdue-band">
           <span className="cal-overdue-label">Overdue</span>
           <div className="cal-overdue-items">
-            {overdueItems.map(item => (
-              <span key={item.id} className="cal-pill" style={categoryPillStyle(item.category)}>{item.title}</span>
+            {overdueItems.map(occ => (
+              <span key={`${occ.item.id}:${occ.kind}`} className="cal-pill" style={categoryPillStyle(occ.item.category)}>{occ.title}</span>
             ))}
           </div>
         </div>
@@ -964,8 +966,8 @@ function MonthView({ items, hiddenCategories, onToggleCategory, onShowAll, onDay
               <span className="cal-add-hint" aria-hidden="true">＋</span>
               <span className={`month-cell-num${isToday ? " month-cell-num--today" : ""}`}>{dayNum}</span>
               <div className="month-cell-items">
-                {dayItems.map(item => (
-                  <div key={item.id} className="cal-pill" style={categoryPillStyle(item.category)} onClick={(event) => event.stopPropagation()}>{item.title}</div>
+                {dayItems.map(occ => (
+                  <div key={`${occ.item.id}:${occ.kind}`} className="cal-pill" style={categoryPillStyle(occ.item.category)} onClick={(event) => event.stopPropagation()}>{occ.title}</div>
                 ))}
               </div>
             </div>
