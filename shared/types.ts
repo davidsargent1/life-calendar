@@ -24,6 +24,12 @@ export type Urgency = "overdue" | "today" | "soon" | "later" | "done";
 
 export type TodayNudge = {
   item: LifeItem;
+  // Unique per occurrence: the item id for the primary nudge, suffixed (e.g.
+  // ":lead") for a birthday's derived "remind before" reminder.
+  key: string;
+  // Display title for this occurrence — the item's own title, or the
+  // "N days until …" label for a lead reminder.
+  title: string;
   urgency: Urgency;
   dueDate: string | null;
   daysUntilDue: number | null;

@@ -29,19 +29,22 @@ function nextMonthlyOccurrence(
 
 export function calculateDueDate(item: LifeItem, todayKey: string): string | null {
   if (isBirthdayCategory(item.category) && item.birthdayMonth && item.birthdayDay) {
+    // The primary reminder lands on the birthday itself; any "remind before"
+    // lead is surfaced as a separate occurrence (see itemOccurrences), not by
+    // moving this date earlier. The cycle is considered handled if the item
+    // was completed any time from the lead date up to the birthday.
     const birthday = nextBirthdayDate(todayKey, item.birthdayMonth, item.birthdayDay);
-    const reminderDate = addDays(birthday, -(item.reminderLeadDays ?? 7));
+    const cycleStart = addDays(birthday, -(item.reminderLeadDays ?? 0));
 
     if (
       item.lastCompletedAt &&
-      daysBetween(reminderDate, item.lastCompletedAt) >= 0 &&
+      daysBetween(cycleStart, item.lastCompletedAt) >= 0 &&
       daysBetween(item.lastCompletedAt, birthday) >= 0
     ) {
-      const nextBirthday = nextBirthdayDate(addDays(birthday, 1), item.birthdayMonth, item.birthdayDay);
-      return addDays(nextBirthday, -(item.reminderLeadDays ?? 7));
+      return nextBirthdayDate(addDays(birthday, 1), item.birthdayMonth, item.birthdayDay);
     }
 
-    return reminderDate;
+    return birthday;
   }
 
   if (item.monthlyWeek != null && item.monthlyWeekday != null) {
@@ -71,6 +74,41 @@ export function calculateDueDate(item: LifeItem, todayKey: string): string | nul
   }
 
   return null;
+}
+
+// A single dated appearance of an item on the calendar / today board. Most
+// items have one (the primary); a birthday with a "remind before" lead has a
+// second, derived occurrence that many days earlier.
+export type Occurrence = {
+  item: LifeItem;
+  title: string;
+  dueDate: string | null;
+  kind: "primary" | "lead";
+};
+
+// Label for a birthday's lead reminder, e.g. "7 days until Mom's birthday".
+export function leadReminderTitle(title: string, leadDays: number): string {
+  return `${leadDays} day${leadDays === 1 ? "" : "s"} until ${title}`;
+}
+
+// Expand an item into the occurrences it shows on the calendar. Every item has
+// a primary occurrence on its due date; a birthday with a positive "remind
+// before" lead adds a second occurrence that many days ahead of the birthday.
+export function itemOccurrences(item: LifeItem, todayKey: string): Occurrence[] {
+  const dueDate = calculateDueDate(item, todayKey);
+  const occurrences: Occurrence[] = [{ item, title: item.title, dueDate, kind: "primary" }];
+
+  const lead = item.reminderLeadDays ?? 0;
+  if (isBirthdayCategory(item.category) && item.birthdayMonth && item.birthdayDay && lead > 0 && dueDate) {
+    occurrences.push({
+      item,
+      title: leadReminderTitle(item.title, lead),
+      dueDate: addDays(dueDate, -lead),
+      kind: "lead"
+    });
+  }
+
+  return occurrences;
 }
 
 export function calculateUrgency(
@@ -105,36 +143,56 @@ export function calculateUrgency(
 
 export function buildMessage(
   item: LifeItem,
+  title: string,
   urgency: Urgency,
   daysUntilDue: number | null
 ): string {
   if (urgency === "done") {
-    return `${item.title} done.`;
+    return `${title} done.`;
   }
 
   if (isPeopleCategory(item.category) && item.contactName && daysUntilDue !== null && daysUntilDue < 0) {
     return `Call ${item.contactName}.`;
   }
 
-  return item.title.endsWith(".") ? item.title : `${item.title}.`;
+  return title.endsWith(".") ? title : `${title}.`;
 }
 
-export function toNudge(item: LifeItem, todayKey: string): TodayNudge {
-  const dueDate = calculateDueDate(item, todayKey);
+function occurrenceNudge(occurrence: Occurrence, todayKey: string): TodayNudge {
+  const { item, title, dueDate } = occurrence;
   const daysUntilDue = dueDate ? daysBetween(todayKey, dueDate) : null;
   const urgency = calculateUrgency(item, todayKey, dueDate);
 
   return {
     item,
+    key: occurrence.kind === "primary" ? item.id : `${item.id}:${occurrence.kind}`,
+    title,
     urgency,
     dueDate,
     daysUntilDue,
-    message: buildMessage(item, urgency, daysUntilDue)
+    message: buildMessage(item, title, urgency, daysUntilDue)
   };
 }
 
+export function toNudge(item: LifeItem, todayKey: string): TodayNudge {
+  return occurrenceNudge(
+    { item, title: item.title, dueDate: calculateDueDate(item, todayKey), kind: "primary" },
+    todayKey
+  );
+}
+
+// Nudges for a single item, expanding a birthday's lead reminder into its own
+// card. Once the birthday is completed for the cycle both occurrences roll to
+// next year and read as "done"; keep only the primary so the board shows one
+// "done" card rather than a duplicate.
+function itemNudges(item: LifeItem, todayKey: string): TodayNudge[] {
+  return itemOccurrences(item, todayKey)
+    .map((occurrence) => occurrenceNudge(occurrence, todayKey))
+    .filter((nudge) => !(nudge.key.endsWith(":lead") && nudge.urgency === "done"));
+}
+
 export function buildToday(items: LifeItem[], todayKey: string): TodayResponse {
-  const nudges = items.map((item) => toNudge(item, todayKey));
+  const nudges = items.flatMap((item) => itemNudges(item, todayKey));
 
   return {
     date: todayKey,
@@ -151,6 +209,6 @@ function sortNudges(nudges: TodayNudge[]): TodayNudge[] {
   return nudges.sort((a, b) => {
     const aDays = a.daysUntilDue ?? Number.POSITIVE_INFINITY;
     const bDays = b.daysUntilDue ?? Number.POSITIVE_INFINITY;
-    return aDays - bDays || a.item.title.localeCompare(b.item.title);
+    return aDays - bDays || a.title.localeCompare(b.title);
   });
 }
