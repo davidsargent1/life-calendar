@@ -278,20 +278,25 @@ h3 {
   gap: 12px;
 }
 
+.nudge-card-body {
+  display: grid;
+  gap: 10px;
+  text-align: left;
+}
+
 .nudge-card--clickable {
+  border-radius: 6px;
   cursor: pointer;
-  transition: border-color 0.12s ease, background 0.12s ease;
+  transition: background 0.12s ease;
 }
 
 .nudge-card--clickable:hover {
   background: #f4efe3;
-  border-color: #d3c6ac;
 }
 
 .nudge-card--clickable:focus-visible {
-  border-color: #1f7a5a;
   outline: 2px solid #1f7a5a;
-  outline-offset: 1px;
+  outline-offset: 2px;
 }
 
 .nudge-message {
