@@ -67,10 +67,22 @@ export default function App() {
   // so the filter persists when switching between them. Opt-out: empty = all
   // shown, so newly added categories appear by default.
   const [hiddenCategories, setHiddenCategories] = useState<Set<string>>(() => new Set());
+  // The reminder being edited, opened by tapping it in the Today/Week/Month/Items
+  // views. When set, its edit form replaces the current view's content.
+  const [editingItem, setEditingItem] = useState<LifeItem | null>(null);
+  // Calendar/list navigation state lives here rather than inside the view
+  // components so it survives opening the editor (which unmounts the active
+  // view): pressing Back then returns to the same week/month/archived state.
+  const [weekOffset, setWeekOffset] = useState(0);
+  const [calYear, setCalYear] = useState(() => new Date().getFullYear());
+  const [calMonth, setCalMonth] = useState(() => new Date().getMonth());
+  const [showArchived, setShowArchived] = useState(false);
 
   // Navigate via the tabs/buttons; clears any seeded Add draft so a plain
-  // "Add" starts blank. The day-click path sets a draft and switches directly.
+  // "Add" starts blank, and abandons any in-progress edit. The day-click path
+  // sets a draft and switches directly.
   function goToView(next: View) {
+    setEditingItem(null);
     setAddDraft(null);
     setView(next);
   }
@@ -133,6 +145,21 @@ export default function App() {
     }
   }
 
+  function handleEditItem(item: LifeItem) {
+    setEditingItem(item);
+  }
+
+  async function handleSaveEdit(input: CreateLifeItemInput) {
+    if (!editingItem) return;
+    try {
+      await updateItem(editingItem.id, input);
+      setEditingItem(null);
+      await load();
+    } catch (saveError: unknown) {
+      setError(saveError instanceof Error ? saveError.message : "Failed to save changes");
+    }
+  }
+
   return (
     <main className="app-shell">
       <Header activeView={view} onNavigate={goToView} />
@@ -145,39 +172,60 @@ export default function App() {
 
       {loading && <section className="notice">Loading household board...</section>}
 
-      {!loading && view === "today" && today && (
-        <TodayView today={today} onComplete={handleComplete} onAdd={() => goToView("add")} />
+      {!loading && editingItem && (
+        <EditDraftView
+          key={editingItem.id}
+          draft={itemToDraft(editingItem)}
+          onBack={() => setEditingItem(null)}
+          onCreate={handleSaveEdit}
+          saveLabel="Save changes"
+        />
       )}
 
-      {!loading && view === "week" && (
+      {!loading && !editingItem && view === "today" && today && (
+        <TodayView today={today} onComplete={handleComplete} onAdd={() => goToView("add")} onEditItem={handleEditItem} />
+      )}
+
+      {!loading && !editingItem && view === "week" && (
         <WeekView
           items={items}
           hiddenCategories={hiddenCategories}
           onToggleCategory={toggleCategory}
           onShowAll={showAllCategories}
           onDayClick={handleAddOnDay}
+          onEditItem={handleEditItem}
+          weekOffset={weekOffset}
+          onWeekOffsetChange={setWeekOffset}
         />
       )}
 
-      {!loading && view === "month" && (
+      {!loading && !editingItem && view === "month" && (
         <MonthView
           items={items}
           hiddenCategories={hiddenCategories}
           onToggleCategory={toggleCategory}
           onShowAll={showAllCategories}
           onDayClick={handleAddOnDay}
+          onEditItem={handleEditItem}
+          year={calYear}
+          month={calMonth}
+          onYearChange={setCalYear}
+          onMonthChange={setCalMonth}
         />
       )}
 
-      {!loading && view === "add" && (
+      {!loading && !editingItem && view === "add" && (
         <AddView key={addDraft ? "seeded" : "blank"} onCreate={handleCreate} initialDraft={addDraft} />
       )}
 
-      {!loading && view === "items" && (
+      {!loading && !editingItem && view === "items" && (
         <ItemsView
           items={items}
           onReload={load}
           onError={setError}
+          onEdit={handleEditItem}
+          showArchived={showArchived}
+          onToggleArchived={() => setShowArchived((v) => !v)}
         />
       )}
     </main>
@@ -231,11 +279,13 @@ function Header({
 function TodayView({
   today,
   onComplete,
-  onAdd
+  onAdd,
+  onEditItem
 }: {
   today: TodayResponse;
   onComplete: (nudge: TodayNudge) => void;
   onAdd: () => void;
+  onEditItem: (item: LifeItem) => void;
 }) {
   const totalOpen =
     today.sections.overdue.length + today.sections.today.length + today.sections.soon.length;
@@ -253,10 +303,10 @@ function TodayView({
       </section>
 
       <div className="nudge-grid">
-        <NudgeSection title="Overdue" tone="overdue" nudges={today.sections.overdue} onComplete={onComplete} />
-        <NudgeSection title="Today" tone="today" nudges={today.sections.today} onComplete={onComplete} />
-        <NudgeSection title="Coming soon" tone="soon" nudges={today.sections.soon} onComplete={onComplete} />
-        <NudgeSection title="Done today" tone="done" nudges={today.sections.done} onComplete={onComplete} />
+        <NudgeSection title="Overdue" tone="overdue" nudges={today.sections.overdue} onComplete={onComplete} onEditItem={onEditItem} />
+        <NudgeSection title="Today" tone="today" nudges={today.sections.today} onComplete={onComplete} onEditItem={onEditItem} />
+        <NudgeSection title="Coming soon" tone="soon" nudges={today.sections.soon} onComplete={onComplete} onEditItem={onEditItem} />
+        <NudgeSection title="Done today" tone="done" nudges={today.sections.done} onComplete={onComplete} onEditItem={onEditItem} />
       </div>
     </div>
   );
@@ -266,12 +316,14 @@ function NudgeSection({
   title,
   tone,
   nudges,
-  onComplete
+  onComplete,
+  onEditItem
 }: {
   title: string;
   tone: "overdue" | "today" | "soon" | "done";
   nudges: TodayNudge[];
   onComplete: (nudge: TodayNudge) => void;
+  onEditItem: (item: LifeItem) => void;
 }) {
   return (
     <section className={`nudge-section ${tone}`}>
@@ -286,7 +338,17 @@ function NudgeSection({
         <div className="nudge-list">
           {nudges.map((nudge) => (
             <article className="nudge-card" key={nudge.key}>
-              <div>
+              {/* The tappable edit region and the Done button are siblings, so
+                  neither interactive control is nested inside the other (keeps
+                  the ARIA valid and stops a keyboard Done from also editing). */}
+              <div
+                className="nudge-card-body nudge-card--clickable"
+                role="button"
+                tabIndex={0}
+                aria-label={`Edit ${nudge.title}`}
+                onClick={() => onEditItem(nudge.item)}
+                onKeyDown={(event) => activateOnKey(event, () => onEditItem(nudge.item))}
+              >
                 <p className="nudge-message">{nudge.message}</p>
                 <p className="meta-line">
                   <span className="cat-dot" style={categoryDotStyle(nudge.item.category)} />
@@ -295,7 +357,12 @@ function NudgeSection({
                 </p>
               </div>
               {tone !== "done" && nudge.kind !== "lead" && (
-                <button className="done-button" onClick={() => onComplete(nudge)} aria-label={`Mark ${nudge.title} done`}>
+                <button
+                  type="button"
+                  className="done-button"
+                  onClick={() => onComplete(nudge)}
+                  aria-label={`Mark ${nudge.title} done`}
+                >
                   Done
                 </button>
               )}
@@ -600,15 +667,18 @@ function EditDraftView({
 function ItemsView({
   items,
   onReload,
-  onError
+  onError,
+  onEdit,
+  showArchived,
+  onToggleArchived
 }: {
   items: LifeItem[];
   onReload: () => void;
   onError: (msg: string) => void;
+  onEdit: (item: LifeItem) => void;
+  showArchived: boolean;
+  onToggleArchived: () => void;
 }) {
-  const [showArchived, setShowArchived] = useState(false);
-  const [editingItem, setEditingItem] = useState<LifeItem | null>(null);
-
   async function handleArchive(item: LifeItem) {
     try {
       if (item.archived) {
@@ -622,35 +692,9 @@ function ItemsView({
     }
   }
 
-  async function handleSaveEdit(input: CreateLifeItemInput) {
-    if (!editingItem) return;
-    try {
-      await updateItem(editingItem.id, input);
-      setEditingItem(null);
-      onReload();
-    } catch (err) {
-      onError(err instanceof Error ? err.message : "Failed to save changes");
-    }
-  }
-
-  function toggleArchived() {
-    setShowArchived(next => !next);
-  }
-
   const active = items.filter(i => !i.archived);
   const archived = items.filter(i => i.archived);
   const visible = showArchived ? items : active;
-
-  if (editingItem) {
-    return (
-      <EditDraftView
-        draft={itemToDraft(editingItem)}
-        onBack={() => setEditingItem(null)}
-        onCreate={handleSaveEdit}
-        saveLabel="Save changes"
-      />
-    );
-  }
 
   return (
     <section className="items-table">
@@ -659,7 +703,7 @@ function ItemsView({
         <div className="items-heading-right">
           <span>{active.length}{archived.length > 0 ? ` + ${archived.length} archived` : ""}</span>
           {archived.length > 0 && (
-            <button className="toggle-archived" onClick={toggleArchived}>
+            <button className="toggle-archived" onClick={onToggleArchived}>
               {showArchived ? "Hide archived" : "Show archived"}
             </button>
           )}
@@ -679,7 +723,7 @@ function ItemsView({
           </span>
           <div className="item-actions">
             {!item.archived && (
-              <button onClick={() => setEditingItem(item)}>Edit</button>
+              <button onClick={() => onEdit(item)}>Edit</button>
             )}
             <button onClick={() => handleArchive(item)}>
               {item.archived ? "Unarchive" : "Archive"}
@@ -701,6 +745,7 @@ type CalendarViewProps = {
   onToggleCategory: (category: string) => void;
   onShowAll: () => void;
   onDayClick: (dayKey: string) => void;
+  onEditItem: (item: LifeItem) => void;
 };
 
 function weekdayName(dayKey: string): string {
@@ -721,7 +766,7 @@ function CategoryFilter({
   hiddenCategories,
   onToggleCategory,
   onShowAll
-}: Omit<CalendarViewProps, "onDayClick">) {
+}: Omit<CalendarViewProps, "onDayClick" | "onEditItem">) {
   const categories = useMemo(() => {
     const seen = new Set(items.filter(i => !i.archived).map(i => i.category).filter(Boolean));
     return Array.from(seen).sort((a, b) => a.localeCompare(b));
@@ -762,8 +807,10 @@ function CategoryFilter({
   );
 }
 
-function WeekView({ items, hiddenCategories, onToggleCategory, onShowAll, onDayClick }: CalendarViewProps) {
-  const [weekOffset, setWeekOffset] = useState(0);
+function WeekView({ items, hiddenCategories, onToggleCategory, onShowAll, onDayClick, onEditItem, weekOffset, onWeekOffsetChange }: CalendarViewProps & {
+  weekOffset: number;
+  onWeekOffsetChange: React.Dispatch<React.SetStateAction<number>>;
+}) {
   const todayKey = toDateKey(new Date());
   const activeItems = useMemo(
     () => items.filter(i => !i.archived && !hiddenCategories.has(i.category)),
@@ -802,11 +849,11 @@ function WeekView({ items, hiddenCategories, onToggleCategory, onShowAll, onDayC
   return (
     <div className="cal-layout">
       <div className="cal-nav">
-        <button className="cal-nav-btn" onClick={() => setWeekOffset(o => o - 1)}>← Prev</button>
+        <button className="cal-nav-btn" onClick={() => onWeekOffsetChange(o => o - 1)}>← Prev</button>
         <span className="cal-range-label">{rangeLabel}</span>
-        <button className="cal-nav-btn" onClick={() => setWeekOffset(o => o + 1)}>Next →</button>
+        <button className="cal-nav-btn" onClick={() => onWeekOffsetChange(o => o + 1)}>Next →</button>
         {weekOffset !== 0 && (
-          <button className="cal-nav-btn cal-today-btn" onClick={() => setWeekOffset(0)}>Today</button>
+          <button className="cal-nav-btn cal-today-btn" onClick={() => onWeekOffsetChange(0)}>Today</button>
         )}
       </div>
 
@@ -854,7 +901,17 @@ function WeekView({ items, hiddenCategories, onToggleCategory, onShowAll, onDayC
                 {dayItems.length === 0
                   ? <p className="cal-empty">—</p>
                   : dayItems.map(occ => (
-                    <div key={`${occ.item.id}:${occ.kind}`} className="cal-pill" style={categoryPillStyle(occ.item.category)} onClick={(event) => event.stopPropagation()}>{occ.title}</div>
+                    <div
+                      key={`${occ.item.id}:${occ.kind}`}
+                      className="cal-pill cal-pill--clickable"
+                      style={categoryPillStyle(occ.item.category)}
+                      role="button"
+                      tabIndex={0}
+                      aria-label={`Edit ${occ.title}`}
+                      title={`Edit ${occ.title}`}
+                      onClick={(event) => { event.stopPropagation(); onEditItem(occ.item); }}
+                      onKeyDown={(event) => { event.stopPropagation(); activateOnKey(event, () => onEditItem(occ.item)); }}
+                    >{occ.title}</div>
                   ))
                 }
               </div>
@@ -866,12 +923,15 @@ function WeekView({ items, hiddenCategories, onToggleCategory, onShowAll, onDayC
   );
 }
 
-function MonthView({ items, hiddenCategories, onToggleCategory, onShowAll, onDayClick }: CalendarViewProps) {
+function MonthView({ items, hiddenCategories, onToggleCategory, onShowAll, onDayClick, onEditItem, year, month, onYearChange, onMonthChange }: CalendarViewProps & {
+  year: number;
+  month: number;
+  onYearChange: React.Dispatch<React.SetStateAction<number>>;
+  onMonthChange: React.Dispatch<React.SetStateAction<number>>;
+}) {
   const todayKey = toDateKey(new Date());
   const todayYear = Number(todayKey.slice(0, 4));
   const todayMonth = Number(todayKey.slice(5, 7)) - 1; // 0-indexed
-  const [year, setYear] = useState(todayYear);
-  const [month, setMonth] = useState(todayMonth);
 
   const activeItems = useMemo(
     () => items.filter(i => !i.archived && !hiddenCategories.has(i.category)),
@@ -884,13 +944,13 @@ function MonthView({ items, hiddenCategories, onToggleCategory, onShowAll, onDay
   );
 
   function prevMonth() {
-    if (month === 0) { setYear(y => y - 1); setMonth(11); }
-    else setMonth(m => m - 1);
+    if (month === 0) { onYearChange(y => y - 1); onMonthChange(11); }
+    else onMonthChange(m => m - 1);
   }
 
   function nextMonth() {
-    if (month === 11) { setYear(y => y + 1); setMonth(0); }
-    else setMonth(m => m + 1);
+    if (month === 11) { onYearChange(y => y + 1); onMonthChange(0); }
+    else onMonthChange(m => m + 1);
   }
 
   const grid = buildMonthGrid(year, month);
@@ -913,8 +973,8 @@ function MonthView({ items, hiddenCategories, onToggleCategory, onShowAll, onDay
         {!isCurrentMonth && (
           <button className="cal-nav-btn cal-today-btn" onClick={() => {
             const now = new Date();
-            setYear(now.getFullYear());
-            setMonth(now.getMonth());
+            onYearChange(now.getFullYear());
+            onMonthChange(now.getMonth());
           }}>
             Today
           </button>
@@ -967,7 +1027,17 @@ function MonthView({ items, hiddenCategories, onToggleCategory, onShowAll, onDay
               <span className={`month-cell-num${isToday ? " month-cell-num--today" : ""}`}>{dayNum}</span>
               <div className="month-cell-items">
                 {dayItems.map(occ => (
-                  <div key={`${occ.item.id}:${occ.kind}`} className="cal-pill" style={categoryPillStyle(occ.item.category)} onClick={(event) => event.stopPropagation()}>{occ.title}</div>
+                  <div
+                    key={`${occ.item.id}:${occ.kind}`}
+                    className="cal-pill cal-pill--clickable"
+                    style={categoryPillStyle(occ.item.category)}
+                    role="button"
+                    tabIndex={0}
+                    aria-label={`Edit ${occ.title}`}
+                    title={`Edit ${occ.title}`}
+                    onClick={(event) => { event.stopPropagation(); onEditItem(occ.item); }}
+                    onKeyDown={(event) => { event.stopPropagation(); activateOnKey(event, () => onEditItem(occ.item)); }}
+                  >{occ.title}</div>
                 ))}
               </div>
             </div>
